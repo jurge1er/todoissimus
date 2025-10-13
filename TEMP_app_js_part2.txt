@@ -1,0 +1,56 @@
+
+  // Only require a label. If no token is provided, we use the proxy.
+  if (!state.label) {
+    showSettings(true);
+    return;
+  }
+  try {
+    const tasks = await getTasksByLabel(state.label, state.token);
+    state.tasks = sortByLocalOrder(tasks, state.label);
+    renderTasks(state.tasks);
+  } catch (err) {
+    toast(err.message);
+    showSettings(true);
+  }
+}
+
+// Handlers
+els.toggleSettings.addEventListener('click', () => {
+  els.settings.classList.toggle('hidden');
+});
+
+els.saveSettings.addEventListener('click', () => {
+  const token = els.token.value.trim();
+  const label = els.label.value.trim();
+  storage.setToken(token);
+  storage.setLabel(label);
+  setTitle(label);
+  toast('Einstellungen gespeichert.');
+});
+
+els.loadList.addEventListener('click', () => {
+  showSettings(false);
+  load();
+});
+
+els.refresh.addEventListener('click', () => load());
+
+els.addTaskBtn.addEventListener('click', async () => {
+  const content = els.newTaskContent.value.trim();
+  if (!content) return;
+  const payload = { content, labels: [state.label] };
+  try {
+    const created = await createTask(payload, state.token);
+    state.tasks.push(created);
+    const ids = Array.from(els.list.querySelectorAll('.task-item')).map(x => x.dataset.id);
+    ids.push(String(created.id));
+    storage.setOrder(state.label, ids);
+    renderTasks(state.tasks);
+    els.newTaskContent.value = '';
+  } catch (err) {
+    toast(err.message);
+  }
+});
+
+// Start
+load();
