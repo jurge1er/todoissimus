@@ -7,16 +7,17 @@
     <meta name="theme-color" content="#1f1f1f" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=5" />
   </head>
   <body>
     <header class="app-header">
-      <div class="brand">Todoissimus</div>
+      <div class="brand">Todoissimus <span class="version-badge">v5</span></div>
       <div class="controls">
         <button id="toggle-settings" title="Einstellungen">⚙️</button>
         <button id="refresh" title="Neu laden">⟳</button>
-      </div>
-    </header>
+              <button id="open-todoist-label" title="In Todoist anzeigen" aria-label="In Todoist anzeigen">T</button>
+            </div>
+          </header>
 
     <section id="settings" class="settings hidden">
       <div class="settings-row">
@@ -64,11 +65,11 @@
       </li>
     </template>
 
-    <script src="app.js"></script>
+          <script src="app.js?v=5"></script>
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('service-worker.js').catch(() => {});
+          navigator.serviceWorker.register('service-worker.js?v=5').catch(() => {});
         });
       }
     </script>

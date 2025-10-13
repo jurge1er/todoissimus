@@ -31,6 +31,27 @@ const els = {
   // removed due/priority inputs in composer
 };
 
+// Inject a Todoist icon button into header controls
+(() => {
+  const controls = document.querySelector('.controls');
+  if (!controls) return;
+  const existing = document.getElementById('open-todoist-label');
+  if (existing) {
+    els.openTodoistLabel = existing;
+    try { console.log('[Todoissimus] Using existing Todoist icon button'); } catch (_) {}
+    return;
+  }
+  const btn = document.createElement('button');
+  btn.id = 'open-todoist-label';
+  btn.title = 'In Todoist anzeigen';
+  // Icon-only: ASCII to avoid any encoding/font issues
+  btn.textContent = 'T';
+  btn.setAttribute('aria-label', 'In Todoist anzeigen');
+  controls.appendChild(btn);
+  els.openTodoistLabel = btn;
+  try { console.log('[Todoissimus] Injected Todoist icon button'); } catch (_) {}
+})();
+
 let state = {
   tasks: [],
   label: '',
@@ -143,10 +164,38 @@ function renderTasks(tasks) {
       }
     });
 
-    // Open Todoist's own edit UI for this task (due date etc.)
+    // Open task in Todoist desktop app if available, else web
     openBtn.addEventListener('click', () => {
-      const taskUrl = t.url || `https://todoist.com/app/task/${t.id}`;
-      try { window.open(taskUrl, '_blank', 'noopener'); } catch (_) { location.href = taskUrl; }
+      const webUrl = t.url || `https://todoist.com/app/task/${t.id}`;
+      const candidates = [
+        `todoist://app/task/${t.id}`,
+        `todoist://task?id=${t.id}`,
+      ];
+
+      let launched = false;
+      const onBlur = () => { launched = true; };
+      window.addEventListener('blur', onBlur, { once: true });
+
+      const fallbackWeb = () => {
+        if (!launched) {
+          try { window.open(webUrl, '_blank', 'noopener'); } catch (_) { location.href = webUrl; }
+        }
+        window.removeEventListener('blur', onBlur);
+      };
+
+      const tryNext = (i) => {
+        if (launched) return; // already switched focus
+        if (i >= candidates.length) { fallbackWeb(); return; }
+        try {
+          location.href = candidates[i];
+        } catch (_) {
+          tryNext(i + 1);
+          return;
+        }
+        setTimeout(() => { if (!launched) tryNext(i + 1); }, 800);
+      };
+
+      tryNext(0);
     });
 
     // Drag & drop events (desktop)
@@ -284,6 +333,42 @@ els.loadList.addEventListener('click', () => {
 });
 
 els.refresh.addEventListener('click', () => load());
+
+// Open current label directly in Todoist (web)
+if (els.openTodoistLabel) {
+  els.openTodoistLabel.addEventListener('click', () => {
+    const raw = (state.label || storage.getLabel() || '').trim();
+    if (!raw) { showSettings(true); return; }
+    const query = raw.startsWith('@') ? raw : `@${raw}`;
+
+    const desktopUrl = `todoist://app/search/${encodeURIComponent(query)}`;
+    const webUrl = `https://todoist.com/app/search/${encodeURIComponent(query)}`;
+
+    // Try opening the desktop app via custom protocol with a web fallback
+    let launched = false;
+    const onBlur = () => { launched = true; };
+    window.addEventListener('blur', onBlur, { once: true });
+
+    const fallback = () => {
+      if (!launched) {
+        try { window.open(webUrl, '_blank', 'noopener'); } catch (_) { location.href = webUrl; }
+      }
+      window.removeEventListener('blur', onBlur);
+    };
+
+    try {
+      // Direct navigation is most reliable for custom protocols
+      location.href = desktopUrl;
+    } catch (_) {
+      // If navigation throws, immediately fallback to web
+      try { window.open(webUrl, '_blank', 'noopener'); } catch { location.href = webUrl; }
+      return;
+    }
+
+    // If the desktop app did not take focus within a short window, fallback
+    setTimeout(fallback, 1200);
+  });
+}
 
 els.addTaskBtn.addEventListener('click', async () => {
   const content = els.newTaskContent.value.trim();

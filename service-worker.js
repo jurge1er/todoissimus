@@ -1,4 +1,4 @@
-const CACHE_NAME = 'todoissimus-cache-v1';
+const CACHE_NAME = 'todoissimus-cache-v5';
 const ASSETS = [
   '/',
   '/index.html',
@@ -28,8 +28,33 @@ self.addEventListener('fetch', (event) => {
 
   // Cache-first for same-origin navigations and static assets
   if (url.origin === location.origin) {
-    event.respondWith(
-      caches.match(req).then((cached) => cached || fetch(req))
-    );
+    // Ensure navigations (HTML) always get latest content (network-first)
+    if (req.mode === 'navigate' || req.destination === 'document' || url.pathname === '/' || url.pathname === '/index.html') {
+      event.respondWith(
+        fetch(req)
+          .then((res) => {
+            const resClone = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone)).catch(() => {});
+            return res;
+          })
+          .catch(() => caches.match(req))
+      );
+      return;
+    }
+    // Ensure updated app.js is fetched when available (network-first)
+    if (url.pathname === '/app.js' || url.pathname === '/styles.css') {
+      event.respondWith(
+        fetch(req)
+          .then((res) => {
+            const resClone = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone)).catch(() => {});
+            return res;
+          })
+          .catch(() => caches.match(req))
+      );
+      return;
+    }
+
+    event.respondWith(caches.match(req).then((cached) => cached || fetch(req)));
   }
 });
