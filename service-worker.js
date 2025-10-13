@@ -1,4 +1,4 @@
-const CACHE_NAME = 'todoissimus-cache-v5';
+const CACHE_NAME = 'todoissimus-cache-v6';
 const ASSETS = [
   '/',
   '/index.html',
@@ -56,5 +56,13 @@ self.addEventListener('fetch', (event) => {
     }
 
     event.respondWith(caches.match(req).then((cached) => cached || fetch(req)));
+  }
+});
+
+// Allow clients to tell this worker to activate immediately
+self.addEventListener('message', (event) => {
+  const data = event && event.data;
+  if (data && data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
   }
 });

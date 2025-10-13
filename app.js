@@ -19,6 +19,7 @@ const els = {
   toggleSettings: document.getElementById('toggle-settings'),
   saveSettings: document.getElementById('save-settings'),
   loadList: document.getElementById('load-list'),
+  updateApp: document.getElementById('update-app'),
   token: document.getElementById('token'),
   label: document.getElementById('label'),
   refresh: document.getElementById('refresh'),
@@ -70,6 +71,29 @@ function setTitle(label) {
 
 function toast(msg) {
   console.log('[Todoissimus]', msg);
+}
+
+// SW update helper: triggers update and reloads when new SW takes control
+async function updateAppNow() {
+  if (!('serviceWorker' in navigator)) { toast('Kein Service Worker verfügbar.'); return; }
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg) { location.reload(); return; }
+    let reloaded = false;
+    const onCtrl = () => { if (!reloaded) { reloaded = true; location.reload(); } };
+    navigator.serviceWorker.addEventListener('controllerchange', onCtrl, { once: true });
+    // Ask any waiting worker to activate immediately
+    if (reg.waiting) {
+      try { reg.waiting.postMessage({ type: 'SKIP_WAITING' }); } catch (_) {}
+    }
+    // Trigger update fetch
+    await reg.update();
+    // In case nothing changes, fallback reload after short delay
+    setTimeout(() => { if (!reloaded) location.reload(); }, 2000);
+  } catch (e) {
+    toast('Aktualisierung fehlgeschlagen, neu laden...');
+    location.reload();
+  }
 }
 
 // API helpers
@@ -333,6 +357,10 @@ els.loadList.addEventListener('click', () => {
 });
 
 els.refresh.addEventListener('click', () => load());
+
+if (els.updateApp) {
+  els.updateApp.addEventListener('click', () => updateAppNow());
+}
 
 // Open current label directly in Todoist (web)
 if (els.openTodoistLabel) {
