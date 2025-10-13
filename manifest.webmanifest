@@ -6,6 +6,9 @@
   "display": "standalone",
   "background_color": "#1f1f1f",
   "theme_color": "#1f1f1f",
+  "protocol_handlers": [
+    { "protocol": "web+todoissimus", "url": "/?label=%s" }
+  ],
   "icons": [
     {
       "src": "/icons/icon.svg",

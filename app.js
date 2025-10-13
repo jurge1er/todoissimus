@@ -316,6 +316,16 @@ function sortByLocalOrder(tasks, label) {
 }
 
 async function load() {
+  // Allow deep-link via query parameter: ?label=foo
+  try {
+    const params = new URLSearchParams(location.search);
+    const qpLabel = (params.get('label') || params.get('l') || '').trim();
+    if (qpLabel) {
+      storage.setLabel(qpLabel);
+      try { history.replaceState(null, '', location.pathname); } catch (_) {}
+    }
+  } catch (_) {}
+
   state.token = storage.getToken();
   state.label = storage.getLabel();
   els.token.value = state.token;
