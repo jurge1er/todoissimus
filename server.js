@@ -81,6 +81,12 @@ app.patch('/api/tasks/:id', (req, res) => {
   return forward(req, res, url, { method: 'PATCH' });
 });
 
+// Projects (for displaying project names without client token)
+app.get('/api/projects', (req, res) => {
+  const url = `${API_BASE}/projects`;
+  return forward(req, res, url);
+});
+
 // Start HTTP server
 const httpServer = app.listen(PORT, () => {
   console.log(`[Todoissimus] Server läuft: http://localhost:${PORT}`);

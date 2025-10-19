@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Todoissimus � Aufgabenliste</title>
+    <meta name="theme-color" content="#1f1f1f" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="shortcut icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icons/icon.svg" />
+          <link rel="stylesheet" href="styles.css?v=29" />
+  </head>
+  <body>
+    <header class="app-header">
+            <div class="brand">Todoissimus <span class="version-badge">v29</span></div>
+      <div class="controls">
+        <button id="toggle-settings" title="Einstellungen">⚙</button>
+        <button id="refresh" title="Neu laden">⟳</button>
+        <button id="open-todoist-label" title="In Todoist anzeigen" aria-label="In Todoist anzeigen">T</button>
+      </div>
+    </header>
+
+    <section id="settings" class="settings hidden">
+      <div class="settings-row">
+        <label for="token">Todoist REST API Token</label>
+        <input type="password" id="token" placeholder="paste token..." />
+      </div>
+      <div class="settings-row">
+        <label for="label">Label</label>
+        <div class="label-wrap">
+          <input type="text" id="label" placeholder="z.B. focus" />
+          <div id="label-suggestions" class="suggestions hidden" role="listbox" aria-label="Labels"></div>
+        </div>
+      </div>
+      <div class="settings-actions">
+        <button id="save-settings">Speichern</button>
+        <button id="load-list">Liste laden</button>
+        <button id="update-app" title="App aktualisieren">App aktualisieren</button>
+      </div>
+      <div class="hint">Hinweis: Token & Label werden lokal im Browser gespeichert.</div>
+    </section>
+
+    <main class="content">
+      <nav class="tabs">
+        <button id="tab-list" class="tab active" aria-controls="list-view">Liste</button>
+</nav>
+
+      <section class="composer">
+        <input type="text" id="new-task-content" placeholder="Neue Aufgabe hinzufügen..." />
+        <button id="add-task">Hinzufügen</button>
+      </section>
+
+      <section id="list-view">
+        <h1 id="list-title">Aufgaben</h1>
+        <ul id="task-list" class="task-list" aria-live="polite"></ul>
+        <div id="empty" class="empty hidden">Keine Aufgaben gefunden.</div>
+      </section>
+
+      <!-- Kanban entfernt -->
+    </main>
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+    <template id="task-item-template">
+      <li class="task-item" draggable="true">
+        <div class="drag-handle" title="Ziehen zum Sortieren">⋮⋮</div>
+        <label class="checkbox-wrap" title="Abhaken">
+          <input type="checkbox" class="task-checkbox" />
+        </label>
+        <div class="task-main">
+          <div class="task-content" contenteditable="false"></div>
+          <div class="task-meta">
+            <span class="task-due-read pill" title="Fälligkeitsangabe"></span>
+            <span class="task-priority-read pill" title="Priorität"></span>
+            <button class="open-todoist">In Todoist bearbeiten</button>
+          </div>
+        </div>
+      </li>
+    </template>
+
+          <script src="app.js?v=29"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('service-worker.js?v=29').catch(() => {});
+        });
+      }
+    </script>
+    <!-- Fallback: ensure Settings toggle always works even if app.js fails early -->
+    <script>
+      (function(){
+        document.addEventListener('click', function(ev){
+          var target = ev.target && (ev.target.closest ? ev.target.closest('#toggle-settings') : null);
+          if (target) {
+            try {
+              var panel = document.getElementById('settings');
+              if (panel) panel.classList.toggle('hidden');
+            } catch (_) {}
+          }
+        }, { passive: true });
+      })();
+    </script>
+    <!-- Fallback: Save/Load handlers and lightweight error banner to unblock if app.js fails -->
+    <style>
+      #debugbar { position: fixed; top: 0; left: 0; right: 0; background: #b00020; color: #fff; padding: 6px 10px; font: 12px/1.3 system-ui, -apple-system, Segoe UI, Roboto; z-index: 99999; display: none; }
+    </style>
+    <script>
+      (function(){
+        // Inline error reporter
+        var bar = null;
+        function ensureBar(){ if (!bar) { bar = document.getElementById('debugbar'); if (!bar) { bar = document.createElement('div'); bar.id='debugbar'; document.body.appendChild(bar); } } return bar; }
+        function showErr(msg){ var b = ensureBar(); try { b.textContent = '[Fehler] ' + String(msg || 'Unbekannter Fehler'); b.style.display = 'block'; } catch (_) {} }
+        window.addEventListener('error', function(e){ try { showErr((e && (e.message || (e.error && e.error.message))) || e); } catch(_){} });
+        window.addEventListener('unhandledrejection', function(e){ try { var r=e && e.reason; showErr((r && (r.message || r)) || e); } catch(_){} });
+
+        // Save/Load fallback (only runs if app.js didn't bind its handlers)
+        document.addEventListener('click', function(ev){
+          var el = ev.target && (ev.target.closest ? ev.target.closest('#save-settings, #load-list') : null);
+          if (!el) return;
+          try {
+            if (el.id === 'save-settings') {
+              var t = (document.getElementById('token')||{}).value || '';
+              var l = (document.getElementById('label')||{}).value || '';
+              try { localStorage.setItem('todoissimus_token', t); } catch(_){}
+              try { localStorage.setItem('todoissimus_label', l); } catch(_){}
+              try { alert('Einstellungen lokal gespeichert'); } catch(_){}
+            } else if (el.id === 'load-list') {
+              try { var p = document.getElementById('settings'); if (p) p.classList.add('hidden'); } catch(_){ }
+              // Prefer app.js load() if available, else reload
+              try { if (typeof load === 'function') { load(); } else { location.reload(); } } catch(_) { location.reload(); }
+            }
+          } catch(_){}
+        });
+      })();
+    </script>
+  </body>
+  </html>
+
+
+
+

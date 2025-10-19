@@ -57,7 +57,8 @@ let state = {
   tasks: [],
   label: '',
   token: '',
-  drag: { srcEl: null, srcId: null },
+  projects: new Map(),
+  drag: { srcEl: null, srcId: null, indicator: null },
 };
 
 // UI helpers
@@ -141,6 +142,10 @@ async function createTask(payload, token) {
   return api('/tasks', { method: 'POST', token, body: payload });
 }
 
+async function getProjects(token) {
+  return api('/projects', { token });
+}
+
 // Rendering & interaction
 function renderTasks(tasks) {
   els.list.innerHTML = '';
@@ -157,7 +162,17 @@ function renderTasks(tasks) {
     const checkbox = li.querySelector('.task-checkbox');
     const contentEl = li.querySelector('.task-content');
     const dueRead = li.querySelector('.task-due-read');
-    const prioRead = li.querySelector('.task-priority-read');
+    // Reuse priority pill as project pill if template still contains it
+    let projectEl = li.querySelector('.task-project');
+    if (!projectEl) {
+      const legacyPrio = li.querySelector('.task-priority-read');
+      if (legacyPrio) {
+        legacyPrio.classList.remove('task-priority-read');
+        legacyPrio.classList.add('task-project');
+        legacyPrio.setAttribute('title', 'Projekt');
+        projectEl = legacyPrio;
+      }
+    }
     const openBtn = li.querySelector('.open-todoist');
 
     contentEl.textContent = t.content || '';
@@ -168,8 +183,13 @@ function renderTasks(tasks) {
     // API: 4=highest,3,2,1=lowest;
     // UI: P1=highest (red) ... P4=lowest (gray)
     const uiPrio = apiPrio === 4 ? 1 : apiPrio === 3 ? 2 : apiPrio === 2 ? 3 : 4;
-    prioRead.textContent = `P${uiPrio}`;
     li.classList.add(`prio-${uiPrio}`);
+
+    // Show project name in the pill
+    if (projectEl) {
+      const projName = state.projects.get(String(t.project_id)) || '';
+      projectEl.textContent = projName;
+    }
 
     checkbox.addEventListener('change', async (e) => {
       checkbox.disabled = true;
@@ -189,6 +209,13 @@ function renderTasks(tasks) {
     });
 
     // Open task in Todoist desktop app if available, else web
+    // Make the button icon-like (white T on red background)
+    if (openBtn) {
+      openBtn.textContent = 'T';
+      openBtn.title = 'In Todoist anzeigen';
+      openBtn.setAttribute('aria-label', 'In Todoist anzeigen');
+    }
+
     openBtn.addEventListener('click', () => {
       const webUrl = t.url || `https://todoist.com/app/task/${t.id}`;
       const candidates = [
@@ -230,6 +257,16 @@ function renderTasks(tasks) {
       );
     }
 
+    // Helper: get or create the red insertion indicator
+    function ensureIndicator() {
+      if (!state.drag.indicator) {
+        const ind = document.createElement('li');
+        ind.className = 'drop-indicator';
+        state.drag.indicator = ind;
+      }
+      return state.drag.indicator;
+    }
+
     li.addEventListener('dragstart', (e) => {
       if (isInteractive(e.target)) { e.preventDefault(); return; }
       li.classList.add('dragging');
@@ -237,9 +274,24 @@ function renderTasks(tasks) {
       state.drag.srcId = t.id;
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', t.id);
+      // Place indicator where the item currently is, then hide the item
+      const next = li.nextSibling;
+      const ind = ensureIndicator();
+      if (next) els.list.insertBefore(ind, next); else els.list.appendChild(ind);
+      li.style.display = 'none';
     });
     li.addEventListener('dragend', () => {
+      // If drag ended without a proper drop, restore original position
+      if (state.drag.indicator && state.drag.srcEl) {
+        els.list.insertBefore(li, state.drag.indicator);
+      }
+      li.style.display = '';
       li.classList.remove('dragging');
+      // Cleanup indicator
+      if (state.drag.indicator && state.drag.indicator.parentNode) {
+        state.drag.indicator.parentNode.removeChild(state.drag.indicator);
+      }
+      state.drag.indicator = null;
       state.drag.srcEl = null;
       state.drag.srcId = null;
     });
@@ -248,20 +300,28 @@ function renderTasks(tasks) {
       e.dataTransfer.dropEffect = 'move';
       const over = e.currentTarget;
       if (over === state.drag.srcEl) return;
-      const list = els.list;
       const rect = over.getBoundingClientRect();
       const before = (e.clientY - rect.top) < rect.height / 2;
-      if (before) list.insertBefore(state.drag.srcEl, over);
-      else list.insertBefore(state.drag.srcEl, over.nextSibling);
+      const ind = ensureIndicator();
+      if (before) els.list.insertBefore(ind, over);
+      else els.list.insertBefore(ind, over.nextSibling);
     });
     li.addEventListener('drop', () => {
+      // Insert the dragged item at the indicator and persist new order
+      const ind = state.drag.indicator;
+      if (ind) {
+        els.list.insertBefore(li, ind);
+        if (ind.parentNode) ind.parentNode.removeChild(ind);
+      }
+      li.style.display = '';
       // Persist new order
       const ids = Array.from(els.list.querySelectorAll('.task-item')).map(x => x.dataset.id);
       storage.setOrder(state.label, ids);
+      state.drag.indicator = null;
     });
 
     // Touch-friendly reorder (pointer events fallback)
-    const handle = li.querySelector('.drag-handle') || li;
+    const handle = li; // allow dragging from anywhere on the task item
     let pointerDragging = false;
     function onPointerMove(ev) {
       if (!pointerDragging) return;
@@ -271,15 +331,23 @@ function renderTasks(tasks) {
       if (!overItem || overItem === state.drag.srcEl) return;
       const rect = overItem.getBoundingClientRect();
       const before = (ev.clientY - rect.top) < rect.height / 2;
-      if (before) els.list.insertBefore(state.drag.srcEl, overItem);
-      else els.list.insertBefore(state.drag.srcEl, overItem.nextSibling);
+      const ind = state.drag.indicator || (state.drag.indicator = (() => { const el = document.createElement('li'); el.className='drop-indicator'; return el })());
+      if (before) els.list.insertBefore(ind, overItem);
+      else els.list.insertBefore(ind, overItem.nextSibling);
     }
     function onPointerUp() {
       if (!pointerDragging) return;
       pointerDragging = false;
+      // Place item at indicator (or restore if none)
+      if (state.drag.indicator) {
+        els.list.insertBefore(li, state.drag.indicator);
+        if (state.drag.indicator.parentNode) state.drag.indicator.parentNode.removeChild(state.drag.indicator);
+      }
       if (state.drag.srcEl) state.drag.srcEl.classList.remove('dragging');
+      li.style.display = '';
       state.drag.srcEl = null;
       state.drag.srcId = null;
+      state.drag.indicator = null;
       document.removeEventListener('pointermove', onPointerMove);
       document.removeEventListener('pointerup', onPointerUp);
       const ids = Array.from(els.list.querySelectorAll('.task-item')).map(x => x.dataset.id);
@@ -291,6 +359,11 @@ function renderTasks(tasks) {
       li.classList.add('dragging');
       state.drag.srcEl = li;
       state.drag.srcId = t.id;
+      // Insert indicator at current position and hide the item
+      const next = li.nextSibling;
+      const ind = state.drag.indicator || (state.drag.indicator = (() => { const el = document.createElement('li'); el.className='drop-indicator'; return el })());
+      if (next) els.list.insertBefore(ind, next); else els.list.appendChild(ind);
+      li.style.display = 'none';
       document.addEventListener('pointermove', onPointerMove);
       document.addEventListener('pointerup', onPointerUp);
     });
@@ -338,7 +411,12 @@ async function load() {
     return;
   }
   try {
-    const tasks = await getTasksByLabel(state.label, state.token);
+    const [tasks, projects] = await Promise.all([
+      getTasksByLabel(state.label, state.token),
+      getProjects(state.token).catch(() => []),
+    ]);
+    // Build projects map id -> name
+    state.projects = new Map((projects || []).map(p => [String(p.id), p.name]));
     state.tasks = sortByLocalOrder(tasks, state.label);
     renderTasks(state.tasks);
   } catch (err) {
