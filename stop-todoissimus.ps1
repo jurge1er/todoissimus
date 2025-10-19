@@ -5,27 +5,49 @@ param(
 
 Write-Host "Looking for process listening on port" $Port
 
+function Stop-ByPid([int]$TargetPid) {
+  if ($TargetPid -le 0) { return }
+  $p = Get-Process -Id $TargetPid -ErrorAction SilentlyContinue
+  if ($null -eq $p) {
+    Write-Host "Process with PID" $TargetPid "not found."
+    return
+  }
+  if ($p.ProcessName -ne 'node' -and $p.ProcessName -ne 'node64') {
+    Write-Warning "Process on port $Port is not Node (it's $($p.ProcessName)). Aborting for safety."
+    return
+  }
+  Write-Host "Stopping Node process PID" $TargetPid "..."
+  Stop-Process -Id $TargetPid -Force
+  Write-Host "Stopped."
+}
+
 try {
   $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction Stop | Select-Object -First 1
-  if ($null -eq $conn) {
-    Write-Host "No process is listening on port" $Port
+  if ($null -ne $conn) {
+    $owningPid = [int]$conn.OwningProcess
+    Stop-ByPid -TargetPid $owningPid
     exit 0
   }
-  $pid = $conn.OwningProcess
-  $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
-  if ($null -eq $proc) {
-    Write-Host "Process with PID" $pid "not found."
-    exit 0
-  }
-  if ($proc.ProcessName -ne 'node' -and $proc.ProcessName -ne 'node64') {
-    Write-Warning "Process on port $Port is not Node (it's $($proc.ProcessName)). Aborting for safety."
-    exit 1
-  }
-  Write-Host "Stopping Node process PID" $pid "..."
-  Stop-Process -Id $pid -Force
-  Write-Host "Stopped."
+  Write-Host "No process is listening on port" $Port
+  exit 0
 } catch {
   Write-Warning $_
-  Write-Warning "If Get-NetTCPConnection is unavailable, try: netstat -ano | findstr :$Port"
+  Write-Warning "Falling back to netstat parsing..."
+  try {
+    $line = (netstat -ano | Select-String ":$Port" | Select-Object -First 1)
+    if ($null -ne $line) {
+      $parts = ($line.ToString() -replace "\s+"," ").Trim().Split(' ')
+      $last = $parts[$parts.Length-1]
+      $parsed = 0
+      if ([int]::TryParse($last, [ref]$parsed)) {
+        Stop-ByPid -TargetPid $parsed
+        exit 0
+      }
+    }
+    Write-Host "No matching netstat entry for port" $Port
+  } catch {
+    Write-Warning $_
+    Write-Warning "If Get-NetTCPConnection is unavailable, try: netstat -ano | findstr :$Port and taskkill /PID <pid> /F"
+  }
 }
 
