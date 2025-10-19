@@ -87,8 +87,28 @@ app.get('/api/projects', (req, res) => {
   return forward(req, res, url);
 });
 
+// Simple health endpoint for connectivity checks
+app.get('/health', (req, res) => res.json({ status: 'ok' }));
+
+function logLanAddresses(port) {
+  try {
+    const os = require('os');
+    const nets = os.networkInterfaces();
+    const addrs = [];
+    for (const name of Object.keys(nets)) {
+      for (const ni of nets[name] || []) {
+        if (ni.family === 'IPv4' && !ni.internal) addrs.push(ni.address);
+      }
+    }
+    if (addrs.length) {
+      console.log('[Todoissimus] Im LAN erreichbar unter:');
+      for (const ip of addrs) console.log(`  -> http://${ip}:${port}`);
+    }
+  } catch (_) {}
+}
+
 // Start HTTP server
-const httpServer = app.listen(PORT, () => {
+const httpServer = app.listen(PORT, '0.0.0.0', () => {
   console.log(`[Todoissimus] Server läuft: http://localhost:${PORT}`);
   // Browser automatisch öffnen (falls nicht deaktiviert)
   if (!process.env.NO_OPEN && process.env.BROWSER !== 'none') {
