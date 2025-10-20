@@ -537,12 +537,10 @@ function renderTasks(tasks) {
       try { document.body.classList.add('drag-active'); } catch(_) {}
       // Insert placeholder at current position and hide the item (no layout jump)
       const ph = ensurePlaceholder(li);
+      // Ensure placeholder matches current item height
+      try { ph.style.height = `${li.offsetHeight}px`; } catch(_) {}
       els.list.insertBefore(ph, li);
-      li.style.visibility = 'hidden';
-      // Insert indicator at current pointer Y and hide the item (keep layout space to avoid jump)
-      const ind = ensureIndicator();
-      positionIndicatorAtY(lastY || (li.getBoundingClientRect().top + 1));
-      li.style.visibility = 'hidden';
+      li.style.display = 'none';
       // Rebind move listener as non-passive to allow preventDefault during drag
       window.removeEventListener('pointermove', onPointerMove);
       window.addEventListener('pointermove', onPointerMove, { passive: false });

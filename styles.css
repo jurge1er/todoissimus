@@ -186,11 +186,11 @@ h1 { margin: 10px 0 12px; font-size: 18px; }
 
 /* Placeholder that occupies space while dragging */
 .drag-placeholder {
-  border: 2px dashed var(--border);
-  border-radius: 10px;
+  border: none;
   background: transparent;
   margin-bottom: 8px;
   list-style: none;
+  pointer-events: none;
 }
 
 /* Red insertion indicator for drag & drop */
