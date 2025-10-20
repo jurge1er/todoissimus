@@ -406,6 +406,9 @@ function renderTasks(tasks) {
       document.removeEventListener('pointermove', onPointerMove);
       document.removeEventListener('pointerup', onPointerUp);
       document.removeEventListener('touchmove', preventTouchMove);
+      // Also remove any touchmove/touchend listeners used for tracking
+      try { document.removeEventListener('touchmove', onTouchMove); } catch(_) {}
+      try { document.removeEventListener('touchend', onTouchEnd); } catch(_) {}
       if (scrollRAF) { try { cancelAnimationFrame(scrollRAF); } catch(_){} scrollRAF = 0; }
       if (!pointerDragging) return; // treated as tap/scroll
       pointerDragging = false;
@@ -437,6 +440,33 @@ function renderTasks(tasks) {
       // Listen for movement/up; initially keep move passive to allow scroll
       document.addEventListener('pointermove', onPointerMove, { passive: true });
       document.addEventListener('pointerup', onPointerUp);
+    });
+
+    // Touch fallbacks to ensure updates on iOS Safari
+    function onTouchMove(ev) {
+      const t = (ev.touches && ev.touches[0]) || (ev.changedTouches && ev.changedTouches[0]);
+      if (!t) return;
+      if (!pointerDragging) {
+        const dx = (t.clientX || 0) - startX;
+        const dy = (t.clientY || 0) - startY;
+        if (Math.hypot(dx, dy) > MOVE_TOL && pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+        return;
+      }
+      lastX = t.clientX || lastX; lastY = t.clientY || lastY;
+      try { ev.preventDefault(); } catch(_) {}
+      positionIndicatorAtY(lastY);
+    }
+    function onTouchEnd() { onPointerUp(); }
+    handle.addEventListener('touchstart', (ev) => {
+      if (isInteractive(ev.target)) return;
+      const t = (ev.touches && ev.touches[0]) || (ev.changedTouches && ev.changedTouches[0]);
+      if (!t) return;
+      startX = t.clientX || 0;
+      startY = t.clientY || 0;
+      lastX = startX; lastY = startY;
+      pressTimer = setTimeout(() => { beginDrag(); }, LONG_PRESS_MS);
+      document.addEventListener('touchmove', onTouchMove, { passive: true });
+      document.addEventListener('touchend', onTouchEnd);
     });
 
     frag.appendChild(li);
