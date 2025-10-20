@@ -495,7 +495,7 @@ function renderTasks(tasks) {
     });
 
     // Touch-friendly reorder (pointer events fallback)
-    const handle = li; // allow dragging from anywhere on the task item
+    const handle = (IS_TOUCH ? (li.querySelector('.drag-handle') || li) : li);
     let pointerDragging = false;
     let pressTimer = null;
     let startX = 0, startY = 0;
