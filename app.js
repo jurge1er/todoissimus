@@ -324,6 +324,54 @@ function renderTasks(tasks) {
       }
     }
     const meta = li.querySelector('.task-meta');
+    // Enforce touch layout inline to avoid any caching/mediaquery issues
+    if (IS_TOUCH) {
+      try {
+        // Card grid: checkbox | content | handle (right)
+        li.style.display = 'grid';
+        li.style.gridTemplateColumns = '24px 1fr 32px';
+        li.style.gap = '6px';
+        li.style.padding = '8px 6px';
+        const handleEl = li.querySelector('.drag-handle');
+        if (handleEl) {
+          handleEl.style.display = 'inline-flex';
+          handleEl.style.alignItems = 'center';
+          handleEl.style.justifyContent = 'center';
+          handleEl.style.width = '32px';
+          handleEl.style.height = '28px';
+          handleEl.style.alignSelf = 'center';
+          handleEl.style.touchAction = 'none';
+          handleEl.style.gridColumn = '3';
+        }
+        const cbWrap = li.querySelector('.checkbox-wrap');
+        if (cbWrap) {
+          cbWrap.style.gridColumn = '1';
+          cbWrap.style.alignSelf = 'center';
+          cbWrap.style.justifySelf = 'center';
+          cbWrap.style.transform = 'translateY(-1px)';
+        }
+        const taskMain = li.querySelector('.task-main');
+        if (taskMain) {
+          taskMain.style.gridColumn = '2';
+          taskMain.style.display = 'grid';
+          taskMain.style.gridTemplateColumns = '1fr auto';
+          taskMain.style.gridTemplateRows = '1fr auto';
+          taskMain.style.alignItems = 'stretch';
+        }
+        if (contentEl) {
+          contentEl.style.gridColumn = '1 / span 2';
+          contentEl.style.gridRow = '1';
+          contentEl.style.alignSelf = 'center';
+          contentEl.style.transform = 'translateY(-1px)';
+        }
+        if (meta) {
+          meta.style.gridColumn = '2';
+          meta.style.gridRow = '2';
+          meta.style.justifySelf = 'end';
+          meta.style.alignSelf = 'end';
+        }
+      } catch (_) {}
+    }
     const openBtn = li.querySelector('.open-todoist');
 
     contentEl.textContent = t.content || '';
