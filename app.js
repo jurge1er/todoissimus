@@ -596,6 +596,9 @@ function renderTasks(tasks) {
       try { document.removeEventListener('touchend', onTouchEnd); } catch(_) {}
       try { document.removeEventListener('touchcancel', onTouchEnd); } catch(_) {}
       try { if (state.activePointerId != null && li.releasePointerCapture) li.releasePointerCapture(state.activePointerId); } catch(_) {}
+      // Re-enable list native panning
+      try { els.list.style.touchAction = ''; } catch(_) {}
+      try { els.list.style.overscrollBehaviorY = ''; } catch(_) {}
       state.activePointerId = null;
       if (scrollRAF) { try { cancelAnimationFrame(scrollRAF); } catch(_){} scrollRAF = 0; }
       if (!pointerDragging) return; // treated as tap/scroll
