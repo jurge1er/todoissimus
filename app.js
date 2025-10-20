@@ -349,7 +349,10 @@ function renderTasks(tasks) {
       descBtn.className = 'task-desc pill';
       descBtn.title = 'Beschreibung anzeigen';
       descBtn.textContent = 'Beschreibung';
-      if (openBtn && openBtn.parentNode === meta) meta.insertBefore(descBtn, openBtn);
+      // place description before project pill if present, else before open button
+      const projectPill = projectEl && projectEl.parentNode === meta ? projectEl : null;
+      if (projectPill) meta.insertBefore(descBtn, projectPill);
+      else if (openBtn && openBtn.parentNode === meta) meta.insertBefore(descBtn, openBtn);
       else meta.appendChild(descBtn);
       descBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -383,36 +386,9 @@ function renderTasks(tasks) {
     }
 
     openBtn.addEventListener('click', () => {
-      const webUrl = t.url || `https://todoist.com/app/task/${t.id}`;
-      const candidates = [
-        `todoist://app/task/${t.id}`,
-        `todoist://task?id=${t.id}`,
-      ];
-
-      let launched = false;
-      const onBlur = () => { launched = true; };
-      window.addEventListener('blur', onBlur, { once: true });
-
-      const fallbackWeb = () => {
-        if (!launched) {
-          try { window.open(webUrl, '_blank', 'noopener'); } catch (_) { location.href = webUrl; }
-        }
-        window.removeEventListener('blur', onBlur);
-      };
-
-      const tryNext = (i) => {
-        if (launched) return; // already switched focus
-        if (i >= candidates.length) { fallbackWeb(); return; }
-        try {
-          location.href = candidates[i];
-        } catch (_) {
-          tryNext(i + 1);
-          return;
-        }
-        setTimeout(() => { if (!launched) tryNext(i + 1); }, 800);
-      };
-
-      tryNext(0);
+      // Prefer the canonical task URL from API when available
+      const target = (t && t.url) ? t.url : `https://todoist.com/app/task/${t.id}`;
+      try { location.href = target; } catch (_) { try { window.open(target, '_blank', 'noopener'); } catch { /* ignore */ } }
     });
 
     // Drag & drop events (desktop)
