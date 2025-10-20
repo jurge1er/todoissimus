@@ -535,11 +535,8 @@ function renderTasks(tasks) {
       document.addEventListener('touchmove', preventTouchMove, { passive: false });
       try { document.documentElement.classList.add('drag-active'); } catch(_) {}
       try { document.body.classList.add('drag-active'); } catch(_) {}
-      // Insert placeholder at current position and hide the item (no layout jump)
-      const ph = ensurePlaceholder(li);
-      // Ensure placeholder matches current item height
-      try { ph.style.height = `${li.offsetHeight}px`; } catch(_) {}
-      els.list.insertBefore(ph, li);
+      // Place red indicator at current Y and hide the item
+      positionIndicatorAtY(lastY || (li.getBoundingClientRect().top + 1));
       li.style.display = 'none';
       // Rebind move listener as non-passive to allow preventDefault during drag
       window.removeEventListener('pointermove', onPointerMove);
@@ -555,8 +552,8 @@ function renderTasks(tasks) {
         else if (lastY > h - edge) delta = step;
         if (delta !== 0) {
           window.scrollBy(0, delta);
-          // Also update marker while scrolling continues
-          try { positionMarkerAtY(lastY); } catch(_){}
+          // Also update indicator while scrolling continues
+          try { positionIndicatorAtY(lastY); } catch(_){}
         }
         scrollRAF = requestAnimationFrame(autoScrollLoop);
       }
@@ -578,7 +575,7 @@ function renderTasks(tasks) {
       // During drag: update indicator and prevent scroll
       try { ev.preventDefault(); } catch (_) {}
       dragMoved = true;
-      positionMarkerAtY(ev.clientY);
+      positionIndicatorAtY(ev.clientY);
     }
 
     function onPointerUp() {
