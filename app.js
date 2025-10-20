@@ -266,6 +266,17 @@ function renderTasks(tasks) {
       }
       return state.drag.indicator;
     }
+    function positionIndicatorAtY(clientY) {
+      const ind = ensureIndicator();
+      const items = Array.from(els.list.children).filter(el => el.classList && el.classList.contains('task-item') && el !== state.drag.srcEl);
+      if (!items.length) { els.list.appendChild(ind); return; }
+      for (const item of items) {
+        const r = item.getBoundingClientRect();
+        const mid = r.top + r.height / 2;
+        if (clientY < mid) { els.list.insertBefore(ind, item); return; }
+      }
+      els.list.appendChild(ind);
+    }
 
     li.addEventListener('dragstart', (e) => {
       if (isInteractive(e.target)) { e.preventDefault(); return; }
@@ -274,10 +285,8 @@ function renderTasks(tasks) {
       state.drag.srcId = t.id;
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', t.id);
-      // Place indicator where the item currently is, then hide the item
-      const next = li.nextSibling;
-      const ind = ensureIndicator();
-      if (next) els.list.insertBefore(ind, next); else els.list.appendChild(ind);
+      // Place indicator based on pointer Y and hide the item
+      positionIndicatorAtY(e.clientY || (li.getBoundingClientRect().top + 1));
       li.style.display = 'none';
     });
     li.addEventListener('dragend', () => {
@@ -298,13 +307,7 @@ function renderTasks(tasks) {
     li.addEventListener('dragover', (e) => {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-      const over = e.currentTarget;
-      if (over === state.drag.srcEl) return;
-      const rect = over.getBoundingClientRect();
-      const before = (e.clientY - rect.top) < rect.height / 2;
-      const ind = ensureIndicator();
-      if (before) els.list.insertBefore(ind, over);
-      else els.list.insertBefore(ind, over.nextSibling);
+      positionIndicatorAtY(e.clientY);
     });
     li.addEventListener('drop', () => {
       // Insert the dragged item at the indicator and persist new order
@@ -314,10 +317,13 @@ function renderTasks(tasks) {
         if (ind.parentNode) ind.parentNode.removeChild(ind);
       }
       li.style.display = '';
+      li.classList.remove('dragging');
       // Persist new order
       const ids = Array.from(els.list.querySelectorAll('.task-item')).map(x => x.dataset.id);
       storage.setOrder(state.label, ids);
       state.drag.indicator = null;
+      state.drag.srcEl = null;
+      state.drag.srcId = null;
     });
 
     // Touch-friendly reorder (pointer events fallback)
@@ -352,10 +358,9 @@ function renderTasks(tasks) {
       try { (document.scrollingElement || document.documentElement).style.overflow = 'hidden'; } catch (_) {}
       // Block touch scrolling on iOS explicitly
       document.addEventListener('touchmove', preventTouchMove, { passive: false });
-      // Insert indicator at current position and hide the item
-      const next = li.nextSibling;
+      // Insert indicator at current pointer Y and hide the item
       const ind = ensureIndicator();
-      if (next) els.list.insertBefore(ind, next); else els.list.appendChild(ind);
+      positionIndicatorAtY(lastY || (li.getBoundingClientRect().top + 1));
       li.style.display = 'none';
       // Rebind move listener as non-passive to allow preventDefault during drag
       document.removeEventListener('pointermove', onPointerMove);
@@ -372,19 +377,7 @@ function renderTasks(tasks) {
         if (delta !== 0) {
           window.scrollBy(0, delta);
           // Also update indicator while scrolling continues
-          try {
-            const overEl = document.elementFromPoint(lastX, lastY);
-            const ind2 = ensureIndicator();
-            if (overEl) {
-              const overItem = overEl.closest && overEl.closest('.task-item');
-              if (overItem && overItem !== state.drag.srcEl) {
-                const rect = overItem.getBoundingClientRect();
-                const before = (lastY - rect.top) < rect.height / 2;
-                if (before) els.list.insertBefore(ind2, overItem);
-                else els.list.insertBefore(ind2, overItem.nextSibling);
-              }
-            }
-          } catch(_){}
+          try { positionIndicatorAtY(lastY); } catch(_){}
         }
         scrollRAF = requestAnimationFrame(autoScrollLoop);
       }
@@ -405,16 +398,7 @@ function renderTasks(tasks) {
       lastX = ev.clientX || lastX; lastY = ev.clientY || lastY;
       // During drag: update indicator and prevent scroll
       try { ev.preventDefault(); } catch (_) {}
-      const overEl = document.elementFromPoint(ev.clientX, ev.clientY);
-      const ind = ensureIndicator();
-      if (!overEl) { els.list.appendChild(ind); return; }
-      const overItem = overEl.closest && overEl.closest('.task-item');
-      if (!overItem) { els.list.appendChild(ind); return; }
-      if (overItem === state.drag.srcEl) return;
-      const rect = overItem.getBoundingClientRect();
-      const before = (ev.clientY - rect.top) < rect.height / 2;
-      if (before) els.list.insertBefore(ind, overItem);
-      else els.list.insertBefore(ind, overItem.nextSibling);
+      positionIndicatorAtY(ev.clientY);
     }
 
     function onPointerUp() {
