@@ -323,12 +323,53 @@ function renderTasks(tasks) {
     // Touch-friendly reorder (pointer events fallback)
     const handle = li; // allow dragging from anywhere on the task item
     let pointerDragging = false;
+    let pressTimer = null;
+    let startX = 0, startY = 0;
+    const LONG_PRESS_MS = 300;
+    const MOVE_TOL = 8;
+
+    function ensureIndicator() {
+      if (!state.drag.indicator) {
+        const el = document.createElement('li');
+        el.className = 'drop-indicator';
+        state.drag.indicator = el;
+      }
+      return state.drag.indicator;
+    }
+
+    function beginDrag() {
+      pointerDragging = true;
+      li.classList.add('dragging');
+      state.drag.srcEl = li;
+      state.drag.srcId = t.id;
+      // Disable default touch gestures while dragging
+      try { document.body.style.touchAction = 'none'; } catch (_) {}
+      try { document.documentElement.style.overscrollBehaviorY = 'contain'; } catch (_) {}
+      // Insert indicator at current position and hide the item
+      const next = li.nextSibling;
+      const ind = ensureIndicator();
+      if (next) els.list.insertBefore(ind, next); else els.list.appendChild(ind);
+      li.style.display = 'none';
+      // Rebind move listener as non-passive to allow preventDefault during drag
+      document.removeEventListener('pointermove', onPointerMove);
+      document.addEventListener('pointermove', onPointerMove, { passive: false });
+    }
+
     function onPointerMove(ev) {
-      if (!pointerDragging) return;
-      // Prevent page scrolling or pull-to-refresh while dragging
+      if (!pointerDragging) {
+        // While not dragging, detect significant movement to let scroll happen and cancel long-press
+        const dx = (ev.clientX || 0) - startX;
+        const dy = (ev.clientY || 0) - startY;
+        if (Math.hypot(dx, dy) > MOVE_TOL && pressTimer) {
+          clearTimeout(pressTimer);
+          pressTimer = null;
+        }
+        return;
+      }
+      // During drag: update indicator and prevent scroll
       try { ev.preventDefault(); } catch (_) {}
       const overEl = document.elementFromPoint(ev.clientX, ev.clientY);
-      const ind = state.drag.indicator || (state.drag.indicator = (() => { const el = document.createElement('li'); el.className='drop-indicator'; return el })());
+      const ind = ensureIndicator();
       if (!overEl) { els.list.appendChild(ind); return; }
       const overItem = overEl.closest && overEl.closest('.task-item');
       if (!overItem) { els.list.appendChild(ind); return; }
@@ -338,8 +379,12 @@ function renderTasks(tasks) {
       if (before) els.list.insertBefore(ind, overItem);
       else els.list.insertBefore(ind, overItem.nextSibling);
     }
+
     function onPointerUp() {
-      if (!pointerDragging) return;
+      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+      document.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('pointerup', onPointerUp);
+      if (!pointerDragging) return; // treated as tap/scroll
       pointerDragging = false;
       // Place item at indicator (or restore if none)
       if (state.drag.indicator) {
@@ -351,31 +396,21 @@ function renderTasks(tasks) {
       state.drag.srcEl = null;
       state.drag.srcId = null;
       state.drag.indicator = null;
-      document.removeEventListener('pointermove', onPointerMove);
-      document.removeEventListener('pointerup', onPointerUp);
       // Restore default touch behavior
       try { document.body.style.touchAction = ''; } catch (_) {}
       try { document.documentElement.style.overscrollBehaviorY = ''; } catch (_) {}
       const ids = Array.from(els.list.querySelectorAll('.task-item')).map(x => x.dataset.id);
       storage.setOrder(state.label, ids);
     }
+
     handle.addEventListener('pointerdown', (ev) => {
       if (isInteractive(ev.target)) return;
-      // Prevent page scroll/pull-to-refresh as drag starts
-      try { ev.preventDefault(); } catch (_) {}
-      pointerDragging = true;
-      li.classList.add('dragging');
-      state.drag.srcEl = li;
-      state.drag.srcId = t.id;
-      // Disable default touch gestures while dragging
-      try { document.body.style.touchAction = 'none'; } catch (_) {}
-      try { document.documentElement.style.overscrollBehaviorY = 'contain'; } catch (_) {}
-      // Insert indicator at current position and hide the item
-      const next = li.nextSibling;
-      const ind = state.drag.indicator || (state.drag.indicator = (() => { const el = document.createElement('li'); el.className='drop-indicator'; return el })());
-      if (next) els.list.insertBefore(ind, next); else els.list.appendChild(ind);
-      li.style.display = 'none';
-      document.addEventListener('pointermove', onPointerMove, { passive: false });
+      startX = ev.clientX || 0;
+      startY = ev.clientY || 0;
+      // Start long-press timer; only then we begin dragging
+      pressTimer = setTimeout(() => { beginDrag(); }, LONG_PRESS_MS);
+      // Listen for movement/up; initially keep move passive to allow scroll
+      document.addEventListener('pointermove', onPointerMove, { passive: true });
       document.addEventListener('pointerup', onPointerUp);
     });
 
