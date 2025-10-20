@@ -491,10 +491,10 @@ function renderTasks(tasks) {
       document.addEventListener('touchmove', preventTouchMove, { passive: false });
       try { document.documentElement.classList.add('drag-active'); } catch(_) {}
       try { document.body.classList.add('drag-active'); } catch(_) {}
-      // Insert indicator at current pointer Y and hide the item
+      // Insert indicator at current pointer Y and hide the item (keep layout space to avoid jump)
       const ind = ensureIndicator();
       positionIndicatorAtY(lastY || (li.getBoundingClientRect().top + 1));
-      li.style.display = 'none';
+      li.style.visibility = 'hidden';
       // Rebind move listener as non-passive to allow preventDefault during drag
       window.removeEventListener('pointermove', onPointerMove);
       window.addEventListener('pointermove', onPointerMove, { passive: false });
@@ -557,7 +557,7 @@ function renderTasks(tasks) {
       }
       if (state.drag.srcEl) state.drag.srcEl.classList.remove('dragging');
       try { li.draggable = true; } catch(_) {}
-      li.style.display = '';
+      li.style.visibility = '';
       state.drag.srcEl = null;
       state.drag.srcId = null;
       state.drag.indicator = null;
