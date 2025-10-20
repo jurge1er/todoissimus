@@ -227,6 +227,27 @@ h1 { margin: 10px 0 12px; font-size: 18px; }
   touch-action: none;
 }
 
+/* Touch layout (JS-driven via .is-touch on html) */
+.is-touch .task-item { grid-template-columns: 24px 1fr 40px; }
+.is-touch .task-item > .checkbox-wrap { grid-column: 1; align-self: center; justify-self: center; }
+.is-touch .task-item > .task-main { grid-column: 2; }
+.is-touch .task-item > .drag-handle { grid-column: 3; }
+.is-touch .drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 100%;
+  color: var(--muted);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  align-self: stretch;
+}
+.is-touch .task-main { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; align-items: start; }
+.is-touch .task-main > .task-content { grid-column: 1 / span 2; grid-row: 1; }
+.is-touch .task-main > .task-meta { grid-column: 2; grid-row: 2; justify-self: end; align-self: end; }
+
 /* Red insertion indicator for drag & drop */
 .drop-indicator {
   height: 3px;

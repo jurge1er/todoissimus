@@ -1,6 +1,15 @@
 const API_BASE = 'https://api.todoist.com/rest/v2';
 const PROXY_BASE = '/api';
 
+// Mark touch-capable devices on the root element to drive CSS layout explicitly
+(function markTouchDevice(){
+  try {
+    var isTouch = (('ontouchstart' in window) || (navigator.maxTouchPoints > 0));
+    if (isTouch) document.documentElement.classList.add('is-touch');
+    else document.documentElement.classList.remove('is-touch');
+  } catch (_) {}
+})();
+
 // LocalStorage helpers
 const storage = {
   getToken: () => localStorage.getItem('todoissimus_token') || '',
