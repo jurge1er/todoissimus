@@ -227,27 +227,6 @@ h1 { margin: 10px 0 12px; font-size: 18px; }
   touch-action: none;
 }
 
-/* Touch layout (JS-driven via .is-touch on html) */
-.is-touch .task-item { grid-template-columns: 24px 1fr 40px; }
-.is-touch .task-item > .checkbox-wrap { grid-column: 1; align-self: center; justify-self: center; }
-.is-touch .task-item > .task-main { grid-column: 2; }
-.is-touch .task-item > .drag-handle { grid-column: 3; }
-.is-touch .drag-handle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 100%;
-  color: var(--muted);
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-  align-self: stretch;
-}
-.is-touch .task-main { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; align-items: start; }
-.is-touch .task-main > .task-content { grid-column: 1 / span 2; grid-row: 1; }
-.is-touch .task-main > .task-meta { grid-column: 2; grid-row: 2; justify-self: end; align-self: end; }
-
 /* Red insertion indicator for drag & drop */
 .drop-indicator {
   height: 3px;
@@ -274,22 +253,8 @@ h1 { margin: 10px 0 12px; font-size: 18px; }
   .content { padding: 12px 10px; }
   .composer { grid-template-columns: 1fr; }
   .composer button { width: 100%; }
-  /* On small screens with mobile drag handle, we need three columns: handle, checkbox, content */
-  .task-item { grid-template-columns: 30px 24px 1fr; padding: 8px 6px; }
-  /* On very small screens we still prefer handle on the right; override to match touch layout */
-  @media (pointer: coarse) {
-    .task-item { grid-template-columns: 24px 1fr 36px; }
-    .task-item > .drag-handle { grid-column: 3; }
-    .task-item > .checkbox-wrap { grid-column: 1; }
-    .task-item > .task-main { grid-column: 2; }
-    .drag-handle { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 100%; color: var(--muted); touch-action: none; user-select: none; -webkit-user-select: none; align-self: stretch; }
-    /* Center the checkbox vertically/horizontally in its column */
-    .task-item > .checkbox-wrap { align-self: center; justify-self: center; }
-    /* Position task meta bottom-right inside task-main */
-    .task-main { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; align-items: start; }
-    .task-main > .task-content { grid-column: 1 / span 2; grid-row: 1; }
-    .task-main > .task-meta { grid-column: 2; grid-row: 2; justify-self: end; align-self: end; }
-  }
+  /* Default small screens: two columns (checkbox, content) */
+  .task-item { grid-template-columns: 24px 1fr; padding: 8px 6px; }
   .task-main { grid-template-columns: 1fr; }
   .task-meta { flex-wrap: wrap; gap: 4px; }
   .pill { font-size: 11px; padding: 2px 6px; }
@@ -300,7 +265,7 @@ h1 { margin: 10px 0 12px; font-size: 18px; }
   .task-item { grid-template-columns: 24px 1fr 36px; }
   /* Place children in explicit columns to avoid vertical stacking */
   .task-item > .drag-handle { grid-column: 3; }
-  .task-item > .checkbox-wrap { grid-column: 1; }
+  .task-item > .checkbox-wrap { grid-column: 1; align-self: center; justify-self: center; }
   .task-item > .task-main { grid-column: 2; }
   .drag-handle {
     display: inline-flex;
@@ -314,4 +279,8 @@ h1 { margin: 10px 0 12px; font-size: 18px; }
     -webkit-user-select: none;
     align-self: stretch;
   }
+  /* Task main internal layout: meta bottom-right */
+  .task-main { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; align-items: start; }
+  .task-main > .task-content { grid-column: 1 / span 2; grid-row: 1; }
+  .task-main > .task-meta { grid-column: 2; grid-row: 2; justify-self: end; align-self: end; }
 }
