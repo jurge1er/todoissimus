@@ -61,6 +61,25 @@ let state = {
   drag: { srcEl: null, srcId: null, indicator: null },
 };
 
+// Prefer Pointer Events; fall back to Touch on older browsers
+const SUPPORTS_POINTER = typeof window !== 'undefined' && 'PointerEvent' in window;
+
+// Safely cancel any active drag and restore hidden elements
+function cancelActiveDrag() {
+  try {
+    if (state.drag.srcEl) {
+      state.drag.srcEl.classList.remove('dragging');
+      state.drag.srcEl.style.display = '';
+    }
+    if (state.drag.indicator && state.drag.indicator.parentNode) {
+      state.drag.indicator.parentNode.removeChild(state.drag.indicator);
+    }
+  } catch (_) {}
+  state.drag.indicator = null;
+  state.drag.srcEl = null;
+  state.drag.srcId = null;
+}
+
 // UI helpers
 function showSettings(show) {
   els.settings.classList.toggle('hidden', !show);
@@ -432,20 +451,24 @@ function renderTasks(tasks) {
       storage.setOrder(state.label, ids);
     }
 
-    handle.addEventListener('pointerdown', (ev) => {
-      if (isInteractive(ev.target)) return;
-      startX = ev.clientX || 0;
-      startY = ev.clientY || 0;
-      lastX = startX; lastY = startY;
-      // Start long-press timer; only then we begin dragging
-      pressTimer = setTimeout(() => { beginDrag(); }, LONG_PRESS_MS);
-      // Listen for movement/up; initially keep move passive to allow scroll
-      document.addEventListener('pointermove', onPointerMove, { passive: true });
-      document.addEventListener('pointerup', onPointerUp);
-      document.addEventListener('pointercancel', onPointerUp);
-    });
+    if (SUPPORTS_POINTER) {
+      handle.addEventListener('pointerdown', (ev) => {
+        if (isInteractive(ev.target)) return;
+        // If any previous drag is active, restore it first
+        if (state.drag.srcEl && state.drag.srcEl !== li) cancelActiveDrag();
+        startX = ev.clientX || 0;
+        startY = ev.clientY || 0;
+        lastX = startX; lastY = startY;
+        // Start long-press timer; only then we begin dragging
+        pressTimer = setTimeout(() => { beginDrag(); }, LONG_PRESS_MS);
+        // Listen for movement/up; initially keep move passive to allow scroll
+        document.addEventListener('pointermove', onPointerMove, { passive: true });
+        document.addEventListener('pointerup', onPointerUp);
+        document.addEventListener('pointercancel', onPointerUp);
+      });
+    }
 
-    // Touch fallbacks to ensure updates on iOS Safari
+    // Touch fallbacks to ensure updates on iOS Safari (only if no Pointer Events)
     function onTouchMove(ev) {
       const t = (ev.touches && ev.touches[0]) || (ev.changedTouches && ev.changedTouches[0]);
       if (!t) return;
@@ -460,18 +483,21 @@ function renderTasks(tasks) {
       positionIndicatorAtY(lastY);
     }
     function onTouchEnd() { onPointerUp(); }
-    handle.addEventListener('touchstart', (ev) => {
-      if (isInteractive(ev.target)) return;
-      const t = (ev.touches && ev.touches[0]) || (ev.changedTouches && ev.changedTouches[0]);
-      if (!t) return;
-      startX = t.clientX || 0;
-      startY = t.clientY || 0;
-      lastX = startX; lastY = startY;
-      pressTimer = setTimeout(() => { beginDrag(); }, LONG_PRESS_MS);
-      document.addEventListener('touchmove', onTouchMove, { passive: true });
-      document.addEventListener('touchend', onTouchEnd);
-      document.addEventListener('touchcancel', onTouchEnd);
-    });
+    if (!SUPPORTS_POINTER) {
+      handle.addEventListener('touchstart', (ev) => {
+        if (isInteractive(ev.target)) return;
+        if (state.drag.srcEl && state.drag.srcEl !== li) cancelActiveDrag();
+        const t = (ev.touches && ev.touches[0]) || (ev.changedTouches && ev.changedTouches[0]);
+        if (!t) return;
+        startX = t.clientX || 0;
+        startY = t.clientY || 0;
+        lastX = startX; lastY = startY;
+        pressTimer = setTimeout(() => { beginDrag(); }, LONG_PRESS_MS);
+        document.addEventListener('touchmove', onTouchMove, { passive: true });
+        document.addEventListener('touchend', onTouchEnd);
+        document.addEventListener('touchcancel', onTouchEnd);
+      });
+    }
 
     frag.appendChild(li);
   }
