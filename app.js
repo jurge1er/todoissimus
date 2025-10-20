@@ -647,8 +647,8 @@ function renderTasks(tasks) {
         lastX = startX; lastY = startY;
         // Start long-press timer; only then we begin dragging
         pressTimer = setTimeout(() => { beginDrag(); }, LONG_PRESS_MS);
-        // Listen for movement/up; initially keep move passive to allow scroll
-      window.addEventListener('pointermove', onPointerMove, { passive: true });
+        // Listen for movement/up; use non-passive so preventDefault can block native scroll during drag-intent
+      window.addEventListener('pointermove', onPointerMove, { passive: false });
       window.addEventListener('pointerup', onPointerUp);
       window.addEventListener('pointercancel', onPointerUp);
       // During long-press window, block text selection but allow scroll
