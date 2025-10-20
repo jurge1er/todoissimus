@@ -481,8 +481,8 @@ function renderTasks(tasks) {
     let scrollRAF = 0;
     let dragMoved = false;
     let dragStartTs = 0;
-    const LONG_PRESS_MS = 300;
-    const MOVE_TOL = 8;
+    const LONG_PRESS_MS = 250;
+    const MOVE_TOL = 12;
 
     function ensureIndicator() {
       if (!state.drag.indicator) {
@@ -565,12 +565,13 @@ function renderTasks(tasks) {
 
     function onPointerMove(ev) {
       if (!pointerDragging) {
-        // While not dragging, detect significant movement to let scroll happen and cancel long-press
+        // While not dragging: if user moves more than tolerance, start dragging instead of canceling
         const dx = (ev.clientX || 0) - startX;
         const dy = (ev.clientY || 0) - startY;
         if (Math.hypot(dx, dy) > MOVE_TOL && pressTimer) {
           clearTimeout(pressTimer);
           pressTimer = null;
+          beginDrag();
         }
         return;
       }
@@ -657,7 +658,7 @@ function renderTasks(tasks) {
       if (!pointerDragging) {
         const dx = (t.clientX || 0) - startX;
         const dy = (t.clientY || 0) - startY;
-        if (Math.hypot(dx, dy) > MOVE_TOL && pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+        if (Math.hypot(dx, dy) > MOVE_TOL && pressTimer) { clearTimeout(pressTimer); pressTimer = null; beginDrag(); }
         return;
       }
       lastX = t.clientX || lastX; lastY = t.clientY || lastY;
