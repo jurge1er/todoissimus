@@ -530,7 +530,7 @@ function renderTasks(tasks) {
       // Disable default touch gestures while dragging
       try { document.body.style.touchAction = 'none'; } catch (_) {}
       try { document.documentElement.style.overscrollBehaviorY = 'contain'; } catch (_) {}
-      try { (document.scrollingElement || document.documentElement).style.overflow = 'hidden'; } catch (_) {}
+      // Do not toggle document overflow here; on Android/Chrome this can jump to top
       // Block touch scrolling explicitly on touch devices (incl. iOS with PointerEvents)
       document.addEventListener('touchmove', preventTouchMove, { passive: false });
       try { document.documentElement.classList.add('drag-active'); } catch(_) {}
@@ -618,7 +618,7 @@ function renderTasks(tasks) {
       // Restore default touch behavior
       try { document.body.style.touchAction = ''; } catch (_) {}
       try { document.documentElement.style.overscrollBehaviorY = ''; } catch (_) {}
-      try { (document.scrollingElement || document.documentElement).style.overflow = ''; } catch (_) {}
+      // No overflow restoration needed (we didn't change it during drag)
       try { document.documentElement.classList.remove('drag-select-block'); } catch(_) {}
       try { document.body.classList.remove('drag-select-block'); } catch(_) {}
       try { document.documentElement.classList.remove('drag-active'); } catch(_) {}
