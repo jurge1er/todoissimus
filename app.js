@@ -603,7 +603,7 @@ function renderTasks(tasks) {
       }
       if (state.drag.srcEl) state.drag.srcEl.classList.remove('dragging');
       try { li.draggable = true; } catch(_) {}
-      li.style.visibility = '';
+      li.style.display = '';
       state.drag.srcEl = null;
       state.drag.srcId = null;
       state.drag.indicator = null;
