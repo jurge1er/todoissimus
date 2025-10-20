@@ -430,14 +430,16 @@ function renderTasks(tasks) {
       try { document.body.style.touchAction = 'none'; } catch (_) {}
       try { document.documentElement.style.overscrollBehaviorY = 'contain'; } catch (_) {}
       try { (document.scrollingElement || document.documentElement).style.overflow = 'hidden'; } catch (_) {}
-      // Block touch scrolling on iOS explicitly
-      document.addEventListener('touchmove', preventTouchMove, { passive: false });
+      // Block touch scrolling on iOS explicitly only when Pointer Events are not supported
+      if (!SUPPORTS_POINTER) {
+        document.addEventListener('touchmove', preventTouchMove, { passive: false });
+      }
       // Insert indicator at current pointer Y and hide the item
       const ind = ensureIndicator();
       positionIndicatorAtY(lastY || (li.getBoundingClientRect().top + 1));
       li.style.display = 'none';
       // Rebind move listener as non-passive to allow preventDefault during drag
-      document.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointermove', onPointerMove);
       window.addEventListener('pointermove', onPointerMove, { passive: false });
       // Start edge auto-scroll loop
       const edge = 60; // px from top/bottom to trigger auto-scroll
