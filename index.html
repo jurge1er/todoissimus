@@ -25,8 +25,24 @@
         <input type="password" id="token" placeholder="paste token..." />
       </div>
       <div class="settings-row">
+        <label for="mode">Ansicht</label>
+        <select id="mode">
+          <option value="label">Label</option>
+          <option value="project">Projekt</option>
+          <option value="filter">Filter</option>
+        </select>
+      </div>
+      <div class="settings-row">
         <label for="label">Label</label>
         <input type="text" id="label" placeholder="z.B. focus" />
+      </div>
+      <div class="settings-row" id="row-project" style="display:none">
+        <label for="project">Projekt</label>
+        <select id="project"></select>
+      </div>
+      <div class="settings-row" id="row-filter" style="display:none">
+        <label for="filter">Filter</label>
+        <input type="text" id="filter" placeholder="z.B. today & @home" />
       </div>
       <div class="settings-actions">
         <button id="save-settings">Speichern</button>

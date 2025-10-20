@@ -56,8 +56,13 @@ async function forward(req, res, targetUrl, options = {}) {
 
 // Proxy-Routen
 app.get('/api/tasks', (req, res) => {
-  const { label } = req.query;
-  const url = `${API_BASE}/tasks${label ? `?label=${encodeURIComponent(label)}` : ''}`;
+  const { label, project_id, filter } = req.query;
+  const params = [];
+  if (label) params.push(`label=${encodeURIComponent(label)}`);
+  if (project_id) params.push(`project_id=${encodeURIComponent(project_id)}`);
+  if (filter) params.push(`filter=${encodeURIComponent(filter)}`);
+  const qs = params.length ? `?${params.join('&')}` : '';
+  const url = `${API_BASE}/tasks${qs}`;
   return forward(req, res, url);
 });
 

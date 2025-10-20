@@ -5,12 +5,18 @@ const PROXY_BASE = '/api';
 const storage = {
   getToken: () => localStorage.getItem('todoissimus_token') || '',
   setToken: (t) => localStorage.setItem('todoissimus_token', t || ''),
+  getMode: () => localStorage.getItem('todoissimus_mode') || 'label',
+  setMode: (m) => localStorage.setItem('todoissimus_mode', m || 'label'),
   getLabel: () => localStorage.getItem('todoissimus_label') || '',
   setLabel: (l) => localStorage.setItem('todoissimus_label', l || ''),
-  getOrder: (label) => {
-    try { return JSON.parse(localStorage.getItem(`todoissimus_order_${label}`) || '[]'); } catch { return []; }
+  getProjectId: () => localStorage.getItem('todoissimus_project') || '',
+  setProjectId: (p) => localStorage.setItem('todoissimus_project', p || ''),
+  getFilter: () => localStorage.getItem('todoissimus_filter') || '',
+  setFilter: (f) => localStorage.setItem('todoissimus_filter', f || ''),
+  getOrder: (key) => {
+    try { return JSON.parse(localStorage.getItem(`todoissimus_order_${key}`) || '[]'); } catch { return []; }
   },
-  setOrder: (label, order) => localStorage.setItem(`todoissimus_order_${label}`, JSON.stringify(order || [])),
+  setOrder: (key, order) => localStorage.setItem(`todoissimus_order_${key}`, JSON.stringify(order || [])),
 };
 
 // DOM elements
@@ -29,6 +35,11 @@ const els = {
   tpl: document.getElementById('task-item-template'),
   addTaskBtn: document.getElementById('add-task'),
   newTaskContent: document.getElementById('new-task-content'),
+  mode: document.getElementById('mode'),
+  project: document.getElementById('project'),
+  filter: document.getElementById('filter'),
+  rowProject: document.getElementById('row-project'),
+  rowFilter: document.getElementById('row-filter'),
   // removed due/priority inputs in composer
 };
 
@@ -57,6 +68,11 @@ let state = {
   tasks: [],
   label: '',
   token: '',
+  mode: 'label',
+  projectId: '',
+  filter: '',
+  orderKey: '',
+  activePointerId: null,
   projects: new Map(),
   drag: { srcEl: null, srcId: null, indicator: null },
 };
@@ -91,6 +107,20 @@ function setTitle(label) {
 
 function toast(msg) {
   console.log('[Todoissimus]', msg);
+}
+
+function setTitleByState() {
+  const m = state.mode || 'label';
+  if (m === 'project') {
+    const name = state.projects.get(String(state.projectId)) || (state.projectId ? `Projekt ${state.projectId}` : 'Projekt');
+    els.listTitle.textContent = `Aufgaben im Projekt: ${name}`;
+    return;
+  }
+  if (m === 'filter') {
+    els.listTitle.textContent = state.filter ? `Aufgaben für Filter: ${state.filter}` : 'Aufgaben';
+    return;
+  }
+  els.listTitle.textContent = state.label ? `Aufgaben für Label: ${state.label}` : 'Aufgaben';
 }
 
 // SW update helper: triggers update and reloads when new SW takes control
@@ -139,8 +169,17 @@ async function api(path, { method = 'GET', token, body } = {}) {
 
 async function getTasksByLabel(label, token) {
   const labelParam = encodeURIComponent(label);
-  // List active tasks filtered by label
   return api(`/tasks?label=${labelParam}`, { token });
+}
+
+async function getTasksByProject(projectId, token) {
+  const pid = encodeURIComponent(projectId);
+  return api(`/tasks?project_id=${pid}`, { token });
+}
+
+async function getTasksByFilter(filter, token) {
+  const f = encodeURIComponent(filter);
+  return api(`/tasks?filter=${f}`, { token });
 }
 
 async function closeTask(id, token) {
@@ -216,8 +255,8 @@ function renderTasks(tasks) {
         await closeTask(t.id, state.token);
         // Remove locally and persist order sans this id
         state.tasks = state.tasks.filter(x => x.id !== t.id);
-        const order = storage.getOrder(state.label).filter(id => String(id) !== String(t.id));
-        storage.setOrder(state.label, order);
+        const order = storage.getOrder(state.orderKey).filter(id => String(id) !== String(t.id));
+        storage.setOrder(state.orderKey, order);
         renderTasks(state.tasks);
       } catch (err) {
         toast(err.message);
@@ -339,7 +378,7 @@ function renderTasks(tasks) {
       li.classList.remove('dragging');
       // Persist new order
       const ids = Array.from(els.list.querySelectorAll('.task-item')).map(x => x.dataset.id);
-      storage.setOrder(state.label, ids);
+      storage.setOrder(state.orderKey, ids);
       state.drag.indicator = null;
       state.drag.srcEl = null;
       state.drag.srcId = null;
@@ -371,6 +410,7 @@ function renderTasks(tasks) {
       li.classList.add('dragging');
       state.drag.srcEl = li;
       state.drag.srcId = t.id;
+      try { if (state.activePointerId != null) li.setPointerCapture(state.activePointerId); } catch(_) {}
       // Disable default touch gestures while dragging
       try { document.body.style.touchAction = 'none'; } catch (_) {}
       try { document.documentElement.style.overscrollBehaviorY = 'contain'; } catch (_) {}
@@ -430,6 +470,8 @@ function renderTasks(tasks) {
       try { document.removeEventListener('touchmove', onTouchMove); } catch(_) {}
       try { document.removeEventListener('touchend', onTouchEnd); } catch(_) {}
       try { document.removeEventListener('touchcancel', onTouchEnd); } catch(_) {}
+      try { if (state.activePointerId != null) li.releasePointerCapture(state.activePointerId); } catch(_) {}
+      state.activePointerId = null;
       if (scrollRAF) { try { cancelAnimationFrame(scrollRAF); } catch(_){} scrollRAF = 0; }
       if (!pointerDragging) return; // treated as tap/scroll
       pointerDragging = false;
@@ -448,7 +490,7 @@ function renderTasks(tasks) {
       try { document.documentElement.style.overscrollBehaviorY = ''; } catch (_) {}
       try { (document.scrollingElement || document.documentElement).style.overflow = ''; } catch (_) {}
       const ids = Array.from(els.list.querySelectorAll('.task-item')).map(x => x.dataset.id);
-      storage.setOrder(state.label, ids);
+      storage.setOrder(state.orderKey, ids);
     }
 
     if (SUPPORTS_POINTER) {
@@ -456,6 +498,7 @@ function renderTasks(tasks) {
         if (isInteractive(ev.target)) return;
         // If any previous drag is active, restore it first
         if (state.drag.srcEl && state.drag.srcEl !== li) cancelActiveDrag();
+        state.activePointerId = ev.pointerId || null;
         startX = ev.clientX || 0;
         startY = ev.clientY || 0;
         lastX = startX; lastY = startY;
@@ -504,8 +547,8 @@ function renderTasks(tasks) {
   els.list.appendChild(frag);
 }
 
-function sortByLocalOrder(tasks, label) {
-  const order = storage.getOrder(label).map(String);
+function sortByLocalOrder(tasks, key) {
+  const order = storage.getOrder(key).map(String);
   if (!order.length) return tasks.slice();
   const map = new Map(tasks.map(t => [String(t.id), t]));
   const sorted = [];
@@ -531,24 +574,57 @@ async function load() {
   } catch (_) {}
 
   state.token = storage.getToken();
+  state.mode = storage.getMode();
   state.label = storage.getLabel();
+  state.projectId = storage.getProjectId();
+  state.filter = storage.getFilter();
   els.token.value = state.token;
+  els.mode.value = state.mode;
   els.label.value = state.label;
-  setTitle(state.label);
+  els.filter.value = state.filter;
 
-  // Only require a label. If no token is provided, we use the proxy.
-  if (!state.label) {
+  // Toggle settings rows visibility
+  const showProject = state.mode === 'project';
+  const showFilter = state.mode === 'filter';
+  els.rowProject.style.display = showProject ? '' : 'none';
+  els.rowFilter.style.display = showFilter ? '' : 'none';
+
+  // For label mode, require a label; for project require projectId; filter can be empty (shows all matching)
+  if ((state.mode === 'label' && !state.label) || (state.mode === 'project' && !state.projectId)) {
     showSettings(true);
     return;
   }
   try {
-    const [tasks, projects] = await Promise.all([
-      getTasksByLabel(state.label, state.token),
-      getProjects(state.token).catch(() => []),
-    ]);
+    const projects = await getProjects(state.token).catch(() => []);
     // Build projects map id -> name
     state.projects = new Map((projects || []).map(p => [String(p.id), p.name]));
-    state.tasks = sortByLocalOrder(tasks, state.label);
+    // Populate project select if present
+    if (els.project && projects && projects.length) {
+      els.project.innerHTML = '';
+      for (const p of projects) {
+        const opt = document.createElement('option');
+        opt.value = String(p.id);
+        opt.textContent = p.name;
+        if (String(p.id) === String(state.projectId)) opt.selected = true;
+        els.project.appendChild(opt);
+      }
+      if (!state.projectId && projects.length) {
+        state.projectId = String(projects[0].id);
+        storage.setProjectId(state.projectId);
+      }
+    }
+
+    // Fetch tasks per mode
+    let tasks = [];
+    if (state.mode === 'project') tasks = await getTasksByProject(state.projectId, state.token);
+    else if (state.mode === 'filter') tasks = await getTasksByFilter(state.filter || '', state.token);
+    else tasks = await getTasksByLabel(state.label, state.token);
+
+    // Compute order key for this view
+    const valueKey = state.mode === 'project' ? String(state.projectId) : (state.mode === 'filter' ? String(state.filter || '') : String(state.label || ''));
+    state.orderKey = `${state.mode}:${valueKey}`;
+    state.tasks = sortByLocalOrder(tasks, state.orderKey);
+    setTitleByState();
     renderTasks(state.tasks);
   } catch (err) {
     toast(err.message);
@@ -563,10 +639,16 @@ els.toggleSettings.addEventListener('click', () => {
 
 els.saveSettings.addEventListener('click', () => {
   const token = els.token.value.trim();
+  const mode = (els.mode && els.mode.value) || 'label';
   const label = els.label.value.trim();
+  const projectId = els.project && els.project.value ? String(els.project.value) : '';
+  const filter = els.filter && els.filter.value ? els.filter.value.trim() : '';
   storage.setToken(token);
+  storage.setMode(mode);
   storage.setLabel(label);
-  setTitle(label);
+  storage.setProjectId(projectId);
+  storage.setFilter(filter);
+  setTitleByState();
   toast('Einstellungen gespeichert.');
 });
 
@@ -576,6 +658,16 @@ els.loadList.addEventListener('click', () => {
 });
 
 els.refresh.addEventListener('click', () => load());
+
+if (els.mode) {
+  els.mode.addEventListener('change', () => {
+    const m = els.mode.value;
+    storage.setMode(m);
+    // Toggle rows
+    els.rowProject.style.display = m === 'project' ? '' : 'none';
+    els.rowFilter.style.display = m === 'filter' ? '' : 'none';
+  });
+}
 
 if (els.updateApp) {
   els.updateApp.addEventListener('click', () => updateAppNow());
@@ -620,13 +712,15 @@ if (els.openTodoistLabel) {
 els.addTaskBtn.addEventListener('click', async () => {
   const content = els.newTaskContent.value.trim();
   if (!content) return;
-  const payload = { content, labels: [state.label] };
+  const payload = { content };
+  if (state.mode === 'project' && state.projectId) payload.project_id = state.projectId;
+  else if (state.mode === 'label' && state.label) payload.labels = [state.label];
   try {
     const created = await createTask(payload, state.token);
     state.tasks.push(created);
     const ids = Array.from(els.list.querySelectorAll('.task-item')).map(x => x.dataset.id);
     ids.push(String(created.id));
-    storage.setOrder(state.label, ids);
+    storage.setOrder(state.orderKey, ids);
     renderTasks(state.tasks);
     els.newTaskContent.value = '';
   } catch (err) {
