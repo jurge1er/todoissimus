@@ -624,6 +624,9 @@ function renderTasks(tasks) {
       try { document.documentElement.classList.remove('drag-active'); } catch(_) {}
       try { document.body.classList.remove('drag-active'); } catch(_) {}
       try { if (state.activePointerId != null && li.releasePointerCapture) li.releasePointerCapture(state.activePointerId); } catch(_) {}
+      // Restore item/handle touch-action
+      try { handle.style.touchAction = ''; } catch(_) {}
+      try { li.style.touchAction = ''; } catch(_) {}
       // Re-enable list native panning
       try { els.list.style.touchAction = ''; } catch(_) {}
       try { els.list.style.overscrollBehaviorY = ''; } catch(_) {}
