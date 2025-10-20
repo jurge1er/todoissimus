@@ -204,6 +204,14 @@ async function getProjects(token) {
   return api('/projects', { token });
 }
 
+async function getLabels(token) {
+  return api('/labels', { token });
+}
+
+async function getFilters(token) {
+  return api('/filters', { token });
+}
+
 // Rendering & interaction
 function renderTasks(tasks) {
   els.list.innerHTML = '';
@@ -410,7 +418,7 @@ function renderTasks(tasks) {
       li.classList.add('dragging');
       state.drag.srcEl = li;
       state.drag.srcId = t.id;
-      try { if (state.activePointerId != null) li.setPointerCapture(state.activePointerId); } catch(_) {}
+      // do not use pointer capture as it can suppress document-level move on some browsers
       // Disable default touch gestures while dragging
       try { document.body.style.touchAction = 'none'; } catch (_) {}
       try { document.documentElement.style.overscrollBehaviorY = 'contain'; } catch (_) {}
@@ -470,7 +478,6 @@ function renderTasks(tasks) {
       try { document.removeEventListener('touchmove', onTouchMove); } catch(_) {}
       try { document.removeEventListener('touchend', onTouchEnd); } catch(_) {}
       try { document.removeEventListener('touchcancel', onTouchEnd); } catch(_) {}
-      try { if (state.activePointerId != null) li.releasePointerCapture(state.activePointerId); } catch(_) {}
       state.activePointerId = null;
       if (scrollRAF) { try { cancelAnimationFrame(scrollRAF); } catch(_){} scrollRAF = 0; }
       if (!pointerDragging) return; // treated as tap/scroll
@@ -582,20 +589,24 @@ async function load() {
   els.mode.value = state.mode;
   els.label.value = state.label;
   els.filter.value = state.filter;
+  setTitleByState();
 
   // Toggle settings rows visibility
   const showProject = state.mode === 'project';
   const showFilter = state.mode === 'filter';
+  const showLabel = state.mode === 'label';
+  // Label row is the sibling of mode; it's the label field's parent
+  const labelRow = els.label && els.label.closest ? els.label.closest('.settings-row') : null;
   els.rowProject.style.display = showProject ? '' : 'none';
   els.rowFilter.style.display = showFilter ? '' : 'none';
+  if (labelRow) labelRow.style.display = showLabel ? '' : 'none';
 
-  // For label mode, require a label; for project require projectId; filter can be empty (shows all matching)
-  if ((state.mode === 'label' && !state.label) || (state.mode === 'project' && !state.projectId)) {
-    showSettings(true);
-    return;
-  }
   try {
-    const projects = await getProjects(state.token).catch(() => []);
+    const [projects, labels, filters] = await Promise.all([
+      getProjects(state.token).catch(() => []),
+      getLabels(state.token).catch(() => []),
+      getFilters(state.token).catch(() => []),
+    ]);
     // Build projects map id -> name
     state.projects = new Map((projects || []).map(p => [String(p.id), p.name]));
     // Populate project select if present
@@ -612,6 +623,30 @@ async function load() {
         state.projectId = String(projects[0].id);
         storage.setProjectId(state.projectId);
       }
+    }
+
+    // Populate labels select
+    if (els.label && labels && labels.length && els.label.tagName === 'SELECT') {
+      els.label.innerHTML = '';
+      for (const l of labels) {
+        const opt = document.createElement('option');
+        opt.value = l.name;
+        opt.textContent = l.name;
+        if (String(l.name) === String(state.label)) opt.selected = true;
+        els.label.appendChild(opt);
+      }
+      if (!state.label && labels.length) {
+        state.label = String(labels[0].name || '');
+        storage.setLabel(state.label);
+      }
+    }
+
+    // Optional: populate filters if we add a dropdown later
+
+    // If still missing a required selection after populating, show settings and stop
+    if ((state.mode === 'label' && !state.label) || (state.mode === 'project' && !state.projectId)) {
+      showSettings(true);
+      return;
     }
 
     // Fetch tasks per mode
@@ -666,6 +701,8 @@ if (els.mode) {
     // Toggle rows
     els.rowProject.style.display = m === 'project' ? '' : 'none';
     els.rowFilter.style.display = m === 'filter' ? '' : 'none';
+    const labelRow = els.label && els.label.closest ? els.label.closest('.settings-row') : null;
+    if (labelRow) labelRow.style.display = m === 'label' ? '' : 'none';
   });
 }
 
@@ -673,15 +710,29 @@ if (els.updateApp) {
   els.updateApp.addEventListener('click', () => updateAppNow());
 }
 
-// Open current label directly in Todoist (web)
+// Open current selection directly in Todoist (web)
 if (els.openTodoistLabel) {
   els.openTodoistLabel.addEventListener('click', () => {
-    const raw = (state.label || storage.getLabel() || '').trim();
-    if (!raw) { showSettings(true); return; }
-    const query = raw.startsWith('@') ? raw : `@${raw}`;
-
-    const desktopUrl = `todoist://app/search/${encodeURIComponent(query)}`;
-    const webUrl = `https://todoist.com/app/search/${encodeURIComponent(query)}`;
+    let desktopUrl = '';
+    let webUrl = '';
+    const mode = state.mode || storage.getMode();
+    if (mode === 'project' && state.projectId) {
+      // Open project view
+      const pid = String(state.projectId);
+      desktopUrl = `todoist://app/project/${encodeURIComponent(pid)}`;
+      webUrl = `https://todoist.com/app/project/${encodeURIComponent(pid)}`;
+    } else if (mode === 'filter') {
+      const rawFilter = (state.filter || storage.getFilter() || '').trim();
+      if (!rawFilter) { showSettings(true); return; }
+      desktopUrl = `todoist://app/search/${encodeURIComponent(rawFilter)}`;
+      webUrl = `https://todoist.com/app/search/${encodeURIComponent(rawFilter)}`;
+    } else {
+      const raw = (state.label || storage.getLabel() || '').trim();
+      if (!raw) { showSettings(true); return; }
+      const query = raw.startsWith('@') ? raw : `@${raw}`;
+      desktopUrl = `todoist://app/search/${encodeURIComponent(query)}`;
+      webUrl = `https://todoist.com/app/search/${encodeURIComponent(query)}`;
+    }
 
     // Try opening the desktop app via custom protocol with a web fallback
     let launched = false;

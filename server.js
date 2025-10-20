@@ -92,6 +92,16 @@ app.get('/api/projects', (req, res) => {
   return forward(req, res, url);
 });
 
+app.get('/api/labels', (req, res) => {
+  const url = `${API_BASE}/labels`;
+  return forward(req, res, url);
+});
+
+app.get('/api/filters', (req, res) => {
+  const url = `${API_BASE}/filters`;
+  return forward(req, res, url);
+});
+
 // Simple health endpoint for connectivity checks
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
