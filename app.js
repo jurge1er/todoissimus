@@ -325,6 +325,8 @@ function renderTasks(tasks) {
     let pointerDragging = false;
     let pressTimer = null;
     let startX = 0, startY = 0;
+    let lastX = 0, lastY = 0;
+    let scrollRAF = 0;
     const LONG_PRESS_MS = 300;
     const MOVE_TOL = 8;
 
@@ -337,6 +339,8 @@ function renderTasks(tasks) {
       return state.drag.indicator;
     }
 
+    function preventTouchMove(e){ try { e.preventDefault(); } catch(_){} }
+
     function beginDrag() {
       pointerDragging = true;
       li.classList.add('dragging');
@@ -345,6 +349,9 @@ function renderTasks(tasks) {
       // Disable default touch gestures while dragging
       try { document.body.style.touchAction = 'none'; } catch (_) {}
       try { document.documentElement.style.overscrollBehaviorY = 'contain'; } catch (_) {}
+      try { (document.scrollingElement || document.documentElement).style.overflow = 'hidden'; } catch (_) {}
+      // Block touch scrolling on iOS explicitly
+      document.addEventListener('touchmove', preventTouchMove, { passive: false });
       // Insert indicator at current position and hide the item
       const next = li.nextSibling;
       const ind = ensureIndicator();
@@ -353,6 +360,35 @@ function renderTasks(tasks) {
       // Rebind move listener as non-passive to allow preventDefault during drag
       document.removeEventListener('pointermove', onPointerMove);
       document.addEventListener('pointermove', onPointerMove, { passive: false });
+      // Start edge auto-scroll loop
+      const edge = 60; // px from top/bottom to trigger auto-scroll
+      const step = 10; // px per frame
+      function autoScrollLoop(){
+        if (!pointerDragging) { scrollRAF = 0; return; }
+        const h = window.innerHeight || 0;
+        let delta = 0;
+        if (lastY < edge) delta = -step;
+        else if (lastY > h - edge) delta = step;
+        if (delta !== 0) {
+          window.scrollBy(0, delta);
+          // Also update indicator while scrolling continues
+          try {
+            const overEl = document.elementFromPoint(lastX, lastY);
+            const ind2 = ensureIndicator();
+            if (overEl) {
+              const overItem = overEl.closest && overEl.closest('.task-item');
+              if (overItem && overItem !== state.drag.srcEl) {
+                const rect = overItem.getBoundingClientRect();
+                const before = (lastY - rect.top) < rect.height / 2;
+                if (before) els.list.insertBefore(ind2, overItem);
+                else els.list.insertBefore(ind2, overItem.nextSibling);
+              }
+            }
+          } catch(_){}
+        }
+        scrollRAF = requestAnimationFrame(autoScrollLoop);
+      }
+      scrollRAF = requestAnimationFrame(autoScrollLoop);
     }
 
     function onPointerMove(ev) {
@@ -366,6 +402,7 @@ function renderTasks(tasks) {
         }
         return;
       }
+      lastX = ev.clientX || lastX; lastY = ev.clientY || lastY;
       // During drag: update indicator and prevent scroll
       try { ev.preventDefault(); } catch (_) {}
       const overEl = document.elementFromPoint(ev.clientX, ev.clientY);
@@ -384,6 +421,8 @@ function renderTasks(tasks) {
       if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
       document.removeEventListener('pointermove', onPointerMove);
       document.removeEventListener('pointerup', onPointerUp);
+      document.removeEventListener('touchmove', preventTouchMove);
+      if (scrollRAF) { try { cancelAnimationFrame(scrollRAF); } catch(_){} scrollRAF = 0; }
       if (!pointerDragging) return; // treated as tap/scroll
       pointerDragging = false;
       // Place item at indicator (or restore if none)
@@ -399,6 +438,7 @@ function renderTasks(tasks) {
       // Restore default touch behavior
       try { document.body.style.touchAction = ''; } catch (_) {}
       try { document.documentElement.style.overscrollBehaviorY = ''; } catch (_) {}
+      try { (document.scrollingElement || document.documentElement).style.overflow = ''; } catch (_) {}
       const ids = Array.from(els.list.querySelectorAll('.task-item')).map(x => x.dataset.id);
       storage.setOrder(state.label, ids);
     }
@@ -407,6 +447,7 @@ function renderTasks(tasks) {
       if (isInteractive(ev.target)) return;
       startX = ev.clientX || 0;
       startY = ev.clientY || 0;
+      lastX = startX; lastY = startY;
       // Start long-press timer; only then we begin dragging
       pressTimer = setTimeout(() => { beginDrag(); }, LONG_PRESS_MS);
       // Listen for movement/up; initially keep move passive to allow scroll
