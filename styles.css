@@ -125,7 +125,7 @@ h1 { margin: 10px 0 12px; font-size: 18px; }
   background: var(--elev);
   margin-bottom: 8px;
 }
-.task-item.dragging { opacity: 0.6; }
+.task-item.dragging { opacity: 1; }
 /* Hide legacy drag handle; dragging works anywhere on the item */
 .drag-handle { display: none; }
 .checkbox-wrap { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid var(--border); }

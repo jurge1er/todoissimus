@@ -405,10 +405,12 @@ function renderTasks(tasks) {
       if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
       document.removeEventListener('pointermove', onPointerMove);
       document.removeEventListener('pointerup', onPointerUp);
+      document.removeEventListener('pointercancel', onPointerUp);
       document.removeEventListener('touchmove', preventTouchMove);
       // Also remove any touchmove/touchend listeners used for tracking
       try { document.removeEventListener('touchmove', onTouchMove); } catch(_) {}
       try { document.removeEventListener('touchend', onTouchEnd); } catch(_) {}
+      try { document.removeEventListener('touchcancel', onTouchEnd); } catch(_) {}
       if (scrollRAF) { try { cancelAnimationFrame(scrollRAF); } catch(_){} scrollRAF = 0; }
       if (!pointerDragging) return; // treated as tap/scroll
       pointerDragging = false;
@@ -440,6 +442,7 @@ function renderTasks(tasks) {
       // Listen for movement/up; initially keep move passive to allow scroll
       document.addEventListener('pointermove', onPointerMove, { passive: true });
       document.addEventListener('pointerup', onPointerUp);
+      document.addEventListener('pointercancel', onPointerUp);
     });
 
     // Touch fallbacks to ensure updates on iOS Safari
@@ -467,6 +470,7 @@ function renderTasks(tasks) {
       pressTimer = setTimeout(() => { beginDrag(); }, LONG_PRESS_MS);
       document.addEventListener('touchmove', onTouchMove, { passive: true });
       document.addEventListener('touchend', onTouchEnd);
+      document.addEventListener('touchcancel', onTouchEnd);
     });
 
     frag.appendChild(li);
