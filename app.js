@@ -346,6 +346,8 @@ function renderTasks(tasks) {
 
     li.addEventListener('dragstart', (e) => {
       if (isInteractive(e.target)) { e.preventDefault(); return; }
+      // Ignore HTML5 drag if a pointer/touch drag is active
+      if (state.drag && state.drag.srcEl) { e.preventDefault(); return; }
       li.classList.add('dragging');
       state.drag.srcEl = li;
       state.drag.srcId = t.id;
@@ -399,6 +401,8 @@ function renderTasks(tasks) {
     let startX = 0, startY = 0;
     let lastX = 0, lastY = 0;
     let scrollRAF = 0;
+    let dragMoved = false;
+    let dragStartTs = 0;
     const LONG_PRESS_MS = 300;
     const MOVE_TOL = 8;
 
@@ -416,8 +420,11 @@ function renderTasks(tasks) {
     function beginDrag() {
       pointerDragging = true;
       li.classList.add('dragging');
+      try { li.draggable = false; } catch(_) {}
       state.drag.srcEl = li;
       state.drag.srcId = t.id;
+      dragMoved = false;
+      dragStartTs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
       // do not use pointer capture as it can suppress document-level move on some browsers
       // Disable default touch gestures while dragging
       try { document.body.style.touchAction = 'none'; } catch (_) {}
@@ -431,7 +438,7 @@ function renderTasks(tasks) {
       li.style.display = 'none';
       // Rebind move listener as non-passive to allow preventDefault during drag
       document.removeEventListener('pointermove', onPointerMove);
-      document.addEventListener('pointermove', onPointerMove, { passive: false });
+      window.addEventListener('pointermove', onPointerMove, { passive: false });
       // Start edge auto-scroll loop
       const edge = 60; // px from top/bottom to trigger auto-scroll
       const step = 10; // px per frame
@@ -465,14 +472,15 @@ function renderTasks(tasks) {
       lastX = ev.clientX || lastX; lastY = ev.clientY || lastY;
       // During drag: update indicator and prevent scroll
       try { ev.preventDefault(); } catch (_) {}
+      dragMoved = true;
       positionIndicatorAtY(ev.clientY);
     }
 
     function onPointerUp() {
       if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-      document.removeEventListener('pointermove', onPointerMove);
-      document.removeEventListener('pointerup', onPointerUp);
-      document.removeEventListener('pointercancel', onPointerUp);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
       document.removeEventListener('touchmove', preventTouchMove);
       // Also remove any touchmove/touchend listeners used for tracking
       try { document.removeEventListener('touchmove', onTouchMove); } catch(_) {}
@@ -482,12 +490,17 @@ function renderTasks(tasks) {
       if (scrollRAF) { try { cancelAnimationFrame(scrollRAF); } catch(_){} scrollRAF = 0; }
       if (!pointerDragging) return; // treated as tap/scroll
       pointerDragging = false;
-      // Place item at indicator (or restore if none)
-      if (state.drag.indicator) {
+      // Place item at indicator (or restore if none). If user released immediately without moving, cancel.
+      const nowTs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      const justStarted = (nowTs - dragStartTs) < 80;
+      if (!dragMoved && justStarted) {
+        if (state.drag.indicator && state.drag.indicator.parentNode) state.drag.indicator.parentNode.removeChild(state.drag.indicator);
+      } else if (state.drag.indicator) {
         els.list.insertBefore(li, state.drag.indicator);
         if (state.drag.indicator.parentNode) state.drag.indicator.parentNode.removeChild(state.drag.indicator);
       }
       if (state.drag.srcEl) state.drag.srcEl.classList.remove('dragging');
+      try { li.draggable = true; } catch(_) {}
       li.style.display = '';
       state.drag.srcEl = null;
       state.drag.srcId = null;
@@ -512,9 +525,9 @@ function renderTasks(tasks) {
         // Start long-press timer; only then we begin dragging
         pressTimer = setTimeout(() => { beginDrag(); }, LONG_PRESS_MS);
         // Listen for movement/up; initially keep move passive to allow scroll
-        document.addEventListener('pointermove', onPointerMove, { passive: true });
-        document.addEventListener('pointerup', onPointerUp);
-        document.addEventListener('pointercancel', onPointerUp);
+      window.addEventListener('pointermove', onPointerMove, { passive: true });
+      window.addEventListener('pointerup', onPointerUp);
+      window.addEventListener('pointercancel', onPointerUp);
       });
     }
 
@@ -543,10 +556,10 @@ function renderTasks(tasks) {
         startY = t.clientY || 0;
         lastX = startX; lastY = startY;
         pressTimer = setTimeout(() => { beginDrag(); }, LONG_PRESS_MS);
-        document.addEventListener('touchmove', onTouchMove, { passive: true });
-        document.addEventListener('touchend', onTouchEnd);
-        document.addEventListener('touchcancel', onTouchEnd);
-      });
+      document.addEventListener('touchmove', onTouchMove, { passive: true });
+      document.addEventListener('touchend', onTouchEnd);
+      document.addEventListener('touchcancel', onTouchEnd);
+    });
     }
 
     frag.appendChild(li);
@@ -626,18 +639,35 @@ async function load() {
     }
 
     // Populate labels select
-    if (els.label && labels && labels.length && els.label.tagName === 'SELECT') {
+    if (els.label && els.label.tagName === 'SELECT') {
       els.label.innerHTML = '';
-      for (const l of labels) {
+      if (labels && labels.length) {
+        // Placeholder
+        const ph = document.createElement('option');
+        ph.value = '';
+        ph.textContent = '— Label auswählen —';
+        ph.disabled = true;
+        if (!state.label) ph.selected = true;
+        els.label.appendChild(ph);
+        for (const l of labels) {
+          const opt = document.createElement('option');
+          opt.value = l.name;
+          opt.textContent = l.name;
+          if (String(l.name) === String(state.label)) opt.selected = true;
+          els.label.appendChild(opt);
+        }
+        if (!state.label && labels.length) {
+          state.label = String(labels[0].name || '');
+          storage.setLabel(state.label);
+          try { els.label.value = state.label; } catch(_) {}
+        }
+      } else {
         const opt = document.createElement('option');
-        opt.value = l.name;
-        opt.textContent = l.name;
-        if (String(l.name) === String(state.label)) opt.selected = true;
+        opt.value = '';
+        opt.textContent = 'Keine Labels gefunden (Token?)';
+        opt.disabled = true;
+        opt.selected = true;
         els.label.appendChild(opt);
-      }
-      if (!state.label && labels.length) {
-        state.label = String(labels[0].name || '');
-        storage.setLabel(state.label);
       }
     }
 
@@ -703,6 +733,27 @@ if (els.mode) {
     els.rowFilter.style.display = m === 'filter' ? '' : 'none';
     const labelRow = els.label && els.label.closest ? els.label.closest('.settings-row') : null;
     if (labelRow) labelRow.style.display = m === 'label' ? '' : 'none';
+    // Persist any immediate selection change
+    if (m === 'project' && els.project && els.project.value) storage.setProjectId(String(els.project.value));
+    if (m === 'filter' && els.filter) storage.setFilter(els.filter.value.trim());
+    if (m === 'label' && els.label) storage.setLabel(els.label.value.trim());
+    setTitleByState();
+  });
+}
+
+if (els.label) {
+  els.label.addEventListener('change', () => {
+    storage.setLabel(els.label.value.trim());
+  });
+}
+if (els.project) {
+  els.project.addEventListener('change', () => {
+    storage.setProjectId(String(els.project.value));
+  });
+}
+if (els.filter) {
+  els.filter.addEventListener('change', () => {
+    storage.setFilter(els.filter.value.trim());
   });
 }
 

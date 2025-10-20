@@ -27,9 +27,9 @@ app.use(express.json());
 app.use(express.static('.'));
 
 function authHeader(req) {
-  // Bevorzuge Server-Token; optional X-Auth-Token erlauben (z.B. Tests)
-  const token = TODOIST_TOKEN || req.header('X-Auth-Token');
-  if (!token) throw new Error('Fehlendes Server-Token (TODOIST_TOKEN)');
+  // Bevorzuge Client-Header, dann Server-Token (so kann ein korrektes Client-Token ein falsches Server-Token übersteuern)
+  const token = req.header('X-Auth-Token') || TODOIST_TOKEN;
+  if (!token) throw new Error('Fehlendes Token (X-Auth-Token oder TODOIST_TOKEN)');
   return { Authorization: `Bearer ${token}` };
 }
 
