@@ -595,6 +595,7 @@ function renderTasks(tasks) {
       try { document.removeEventListener('touchmove', onTouchMove); } catch(_) {}
       try { document.removeEventListener('touchend', onTouchEnd); } catch(_) {}
       try { document.removeEventListener('touchcancel', onTouchEnd); } catch(_) {}
+      try { els.list.classList.remove('drag-lock'); } catch(_) {}
       try { if (state.activePointerId != null && li.releasePointerCapture) li.releasePointerCapture(state.activePointerId); } catch(_) {}
       // Re-enable list native panning
       try { els.list.style.touchAction = ''; } catch(_) {}
@@ -651,9 +652,10 @@ function renderTasks(tasks) {
       window.addEventListener('pointermove', onPointerMove, { passive: false });
       window.addEventListener('pointerup', onPointerUp);
       window.addEventListener('pointercancel', onPointerUp);
-      // During long-press window, block text selection but allow scroll
+      // During long-press window, block text selection but allow scroll; disable list panning
       try { document.documentElement.classList.add('drag-select-block'); } catch(_) {}
       try { document.body.classList.add('drag-select-block'); } catch(_) {}
+      try { els.list.classList.add('drag-lock'); } catch(_) {}
       });
     }
 
