@@ -572,7 +572,10 @@ function renderTasks(tasks) {
           clearTimeout(pressTimer);
           pressTimer = null;
           beginDrag();
+          return;
         }
+        // Prevent scroll while drag intent is active
+        try { ev.preventDefault(); } catch(_) {}
         return;
       }
       lastX = ev.clientX || lastX; lastY = ev.clientY || lastY;
