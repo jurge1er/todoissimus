@@ -79,6 +79,7 @@ let state = {
 
 // Prefer Pointer Events; fall back to Touch on older browsers
 const SUPPORTS_POINTER = typeof window !== 'undefined' && 'PointerEvent' in window;
+const IS_TOUCH = (() => { try { return (('ontouchstart' in window) || (navigator.maxTouchPoints > 0)); } catch (_) { return false; } })();
 
 // Safely cancel any active drag and restore hidden elements
 function cancelActiveDrag() {
