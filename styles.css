@@ -23,6 +23,11 @@ html, body { overscroll-behavior-y: contain; overscroll-behavior-x: none; }
 /* While dragging, hard-disable scroll/gestures for reliability */
 html.drag-active, body.drag-active { overscroll-behavior-y: contain; touch-action: none; }
 body.drag-active { overflow: hidden; }
+/* While pressing-to-drag, disable text selection only (allow scroll) */
+html.drag-select-block, body.drag-select-block, html.drag-select-block *, body.drag-select-block * {
+  -webkit-user-select: none;
+  user-select: none;
+}
 
 .hidden { display: none !important; }
 
@@ -129,6 +134,7 @@ h1 { margin: 10px 0 12px; font-size: 18px; }
   margin-bottom: 8px;
 }
 .task-item.dragging { opacity: 1; }
+.task-item.dragging, .task-item.dragging * { -webkit-user-select: none; user-select: none; }
 /* Hide legacy drag handle; dragging works anywhere on the item */
 .drag-handle { display: none; }
 .checkbox-wrap { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid var(--border); }

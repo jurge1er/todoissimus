@@ -566,6 +566,8 @@ function renderTasks(tasks) {
       try { document.body.style.touchAction = ''; } catch (_) {}
       try { document.documentElement.style.overscrollBehaviorY = ''; } catch (_) {}
       try { (document.scrollingElement || document.documentElement).style.overflow = ''; } catch (_) {}
+      try { document.documentElement.classList.remove('drag-select-block'); } catch(_) {}
+      try { document.body.classList.remove('drag-select-block'); } catch(_) {}
       try { document.documentElement.classList.remove('drag-active'); } catch(_) {}
       try { document.body.classList.remove('drag-active'); } catch(_) {}
       const ids = Array.from(els.list.querySelectorAll('.task-item')).map(x => x.dataset.id);
@@ -578,6 +580,8 @@ function renderTasks(tasks) {
         // If any previous drag is active, restore it first
         if (state.drag.srcEl && state.drag.srcEl !== li) cancelActiveDrag();
         state.activePointerId = ev.pointerId || null;
+        // Prevent text selection kick-off on Android/Chrome
+        try { ev.preventDefault(); } catch(_) {}
         startX = ev.clientX || 0;
         startY = ev.clientY || 0;
         lastX = startX; lastY = startY;
@@ -587,6 +591,9 @@ function renderTasks(tasks) {
       window.addEventListener('pointermove', onPointerMove, { passive: true });
       window.addEventListener('pointerup', onPointerUp);
       window.addEventListener('pointercancel', onPointerUp);
+      // During long-press window, block text selection but allow scroll
+      try { document.documentElement.classList.add('drag-select-block'); } catch(_) {}
+      try { document.body.classList.add('drag-select-block'); } catch(_) {}
       });
     }
 
