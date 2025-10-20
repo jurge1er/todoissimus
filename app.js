@@ -99,11 +99,11 @@ async function updateAppNow() {
 
 // API helpers
 async function api(path, { method = 'GET', token, body } = {}) {
-  const usingProxy = !token;
-  const headers = usingProxy
-    ? { 'Content-Type': 'application/json' }
-    : { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
-  const url = (usingProxy ? `${PROXY_BASE}${path}` : `${API_BASE}${path}`);
+  // Always use the proxy to avoid CORS issues in browsers (incl. Render).
+  // If a token is provided, send it via X-Auth-Token so the proxy can forward it.
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['X-Auth-Token'] = token;
+  const url = `${PROXY_BASE}${path}`;
   const res = await fetch(url, {
     method,
     headers,
