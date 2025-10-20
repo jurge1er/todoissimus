@@ -1,4 +1,4 @@
-const CACHE_NAME = 'todoissimus-cache-v7';
+const CACHE_NAME = 'todoissimus-cache-v7b';
 const ASSETS = [
   '/',
   '/index.html',
@@ -25,6 +25,12 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
+
+  // Never cache or intercept API calls; always go to network
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(req));
+    return;
+  }
 
   // Cache-first for same-origin navigations and static assets
   if (url.origin === location.origin) {
