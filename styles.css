@@ -20,6 +20,9 @@ body {
 }
 /* Prevent mobile pull-to-refresh and bounce during interactions */
 html, body { overscroll-behavior-y: contain; overscroll-behavior-x: none; }
+/* While dragging, hard-disable scroll/gestures for reliability */
+html.drag-active, body.drag-active { overscroll-behavior-y: contain; touch-action: none; }
+body.drag-active { overflow: hidden; }
 
 .hidden { display: none !important; }
 

@@ -484,10 +484,10 @@ function renderTasks(tasks) {
       try { document.body.style.touchAction = 'none'; } catch (_) {}
       try { document.documentElement.style.overscrollBehaviorY = 'contain'; } catch (_) {}
       try { (document.scrollingElement || document.documentElement).style.overflow = 'hidden'; } catch (_) {}
-      // Block touch scrolling on iOS explicitly only when Pointer Events are not supported
-      if (!SUPPORTS_POINTER) {
-        document.addEventListener('touchmove', preventTouchMove, { passive: false });
-      }
+      // Block touch scrolling explicitly on touch devices (incl. iOS with PointerEvents)
+      document.addEventListener('touchmove', preventTouchMove, { passive: false });
+      try { document.documentElement.classList.add('drag-active'); } catch(_) {}
+      try { document.body.classList.add('drag-active'); } catch(_) {}
       // Insert indicator at current pointer Y and hide the item
       const ind = ensureIndicator();
       positionIndicatorAtY(lastY || (li.getBoundingClientRect().top + 1));
@@ -565,6 +565,8 @@ function renderTasks(tasks) {
       try { document.body.style.touchAction = ''; } catch (_) {}
       try { document.documentElement.style.overscrollBehaviorY = ''; } catch (_) {}
       try { (document.scrollingElement || document.documentElement).style.overflow = ''; } catch (_) {}
+      try { document.documentElement.classList.remove('drag-active'); } catch(_) {}
+      try { document.body.classList.remove('drag-active'); } catch(_) {}
       const ids = Array.from(els.list.querySelectorAll('.task-item')).map(x => x.dataset.id);
       storage.setOrder(state.orderKey, ids);
     }
