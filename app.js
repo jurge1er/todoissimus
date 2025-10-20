@@ -74,7 +74,7 @@ let state = {
   orderKey: '',
   activePointerId: null,
   projects: new Map(),
-  drag: { srcEl: null, srcId: null, indicator: null, placeholder: null },
+  drag: { srcEl: null, srcId: null, indicator: null, placeholder: null, overlay: null },
 };
 
 // Prefer Pointer Events; fall back to Touch on older browsers
@@ -108,6 +108,28 @@ function setTitle(label) {
 
 function toast(msg) {
   console.log('[Todoissimus]', msg);
+}
+
+// Drag overlay helpers to block native scroll and capture input
+function ensureDragOverlay() {
+  if (state.drag.overlay && document.body.contains(state.drag.overlay)) return state.drag.overlay;
+  const ov = document.createElement('div');
+  ov.className = 'drag-overlay';
+  ov.style.display = 'none';
+  document.body.appendChild(ov);
+  state.drag.overlay = ov;
+  return ov;
+}
+function showDragOverlay() {
+  const ov = ensureDragOverlay();
+  ov.style.display = 'block';
+  try { ov.addEventListener('pointermove', (e) => { try { e.preventDefault(); } catch(_) {} }, { passive: false }); } catch(_) {}
+  try { ov.addEventListener('touchmove', (e) => { try { e.preventDefault(); } catch(_) {} }, { passive: false }); } catch(_) {}
+}
+function hideDragOverlay() {
+  const ov = state.drag.overlay;
+  if (!ov) return;
+  ov.style.display = 'none';
 }
 
 // Lightweight description overlay
@@ -596,6 +618,11 @@ function renderTasks(tasks) {
       try { document.removeEventListener('touchend', onTouchEnd); } catch(_) {}
       try { document.removeEventListener('touchcancel', onTouchEnd); } catch(_) {}
       try { els.list.classList.remove('drag-lock'); } catch(_) {}
+      try { hideDragOverlay(); } catch(_) {}
+      try { document.documentElement.classList.remove('drag-select-block'); } catch(_) {}
+      try { document.body.classList.remove('drag-select-block'); } catch(_) {}
+      try { document.documentElement.classList.remove('drag-active'); } catch(_) {}
+      try { document.body.classList.remove('drag-active'); } catch(_) {}
       try { if (state.activePointerId != null && li.releasePointerCapture) li.releasePointerCapture(state.activePointerId); } catch(_) {}
       // Re-enable list native panning
       try { els.list.style.touchAction = ''; } catch(_) {}
@@ -658,6 +685,8 @@ function renderTasks(tasks) {
       try { document.documentElement.classList.add('drag-active'); } catch(_) {}
       try { document.body.classList.add('drag-active'); } catch(_) {}
       try { els.list.classList.add('drag-lock'); } catch(_) {}
+      // Add overlay to capture input and stop native scroll bubbling
+      try { showDragOverlay(); } catch(_) {}
       });
     }
 

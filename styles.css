@@ -194,6 +194,15 @@ h1 { margin: 10px 0 12px; font-size: 18px; }
   pointer-events: none;
 }
 
+/* Full-screen overlay to capture touch/pointer during drag intent */
+.drag-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: transparent;
+  touch-action: none;
+}
+
 /* Red insertion indicator for drag & drop */
 .drop-indicator {
   height: 3px;
