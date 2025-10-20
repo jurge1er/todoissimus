@@ -293,4 +293,7 @@ h1 { margin: 10px 0 12px; font-size: 18px; }
   .task-main { display: grid; grid-template-columns: 1fr auto; grid-template-rows: 1fr auto; align-items: stretch; }
   .task-main > .task-content { grid-column: 1 / span 2; grid-row: 1; align-self: center; }
   .task-main > .task-meta { grid-column: 2; grid-row: 2; justify-self: end; align-self: end; }
+  /* Fine alignment tweaks */
+  .task-item > .checkbox-wrap { transform: translateY(-1px); }
+  .task-main > .task-content { transform: translateY(-1px); }
 }
