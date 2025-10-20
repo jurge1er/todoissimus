@@ -480,6 +480,8 @@ function renderTasks(tasks) {
       state.drag.srcId = t.id;
       dragMoved = false;
       dragStartTs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      // Keep pointer stream attached (helps Android/Chrome)
+      try { if (state.activePointerId != null && li.setPointerCapture) li.setPointerCapture(state.activePointerId); } catch(_) {}
       // do not use pointer capture as it can suppress document-level move on some browsers
       // Disable default touch gestures while dragging
       try { document.body.style.touchAction = 'none'; } catch (_) {}
@@ -543,16 +545,13 @@ function renderTasks(tasks) {
       try { document.removeEventListener('touchmove', onTouchMove); } catch(_) {}
       try { document.removeEventListener('touchend', onTouchEnd); } catch(_) {}
       try { document.removeEventListener('touchcancel', onTouchEnd); } catch(_) {}
+      try { if (state.activePointerId != null && li.releasePointerCapture) li.releasePointerCapture(state.activePointerId); } catch(_) {}
       state.activePointerId = null;
       if (scrollRAF) { try { cancelAnimationFrame(scrollRAF); } catch(_){} scrollRAF = 0; }
       if (!pointerDragging) return; // treated as tap/scroll
       pointerDragging = false;
-      // Place item at indicator (or restore if none). If user released immediately without moving, cancel.
-      const nowTs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-      const justStarted = (nowTs - dragStartTs) < 80;
-      if (!dragMoved && justStarted) {
-        if (state.drag.indicator && state.drag.indicator.parentNode) state.drag.indicator.parentNode.removeChild(state.drag.indicator);
-      } else if (state.drag.indicator) {
+      // Place item at indicator (or restore if none)
+      if (state.drag.indicator) {
         els.list.insertBefore(li, state.drag.indicator);
         if (state.drag.indicator.parentNode) state.drag.indicator.parentNode.removeChild(state.drag.indicator);
       }
