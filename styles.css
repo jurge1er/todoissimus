@@ -249,11 +249,13 @@ h1 { margin: 10px 0 12px; font-size: 18px; }
   .task-item { grid-template-columns: 30px 24px 1fr; padding: 8px 6px; }
   /* On very small screens we still prefer handle on the right; override to match touch layout */
   @media (pointer: coarse) {
-    .task-item { grid-template-columns: 24px 1fr 30px; }
+    .task-item { grid-template-columns: 24px 1fr 36px; }
     .task-item > .drag-handle { grid-column: 3; }
     .task-item > .checkbox-wrap { grid-column: 1; }
     .task-item > .task-main { grid-column: 2; }
-    .drag-handle { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 100%; color: var(--muted); touch-action: none; user-select: none; -webkit-user-select: none; align-self: stretch; }
+    .drag-handle { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 100%; color: var(--muted); touch-action: none; user-select: none; -webkit-user-select: none; align-self: stretch; }
+    /* Center the checkbox vertically/horizontally in its column */
+    .task-item > .checkbox-wrap { align-self: center; justify-self: center; }
     /* Position task meta bottom-right inside task-main */
     .task-main { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; align-items: start; }
     .task-main > .task-content { grid-column: 1 / span 2; grid-row: 1; }
@@ -266,7 +268,7 @@ h1 { margin: 10px 0 12px; font-size: 18px; }
 
 /* On touch devices, show drag handle on the right and add handle column */
 @media (pointer: coarse) {
-  .task-item { grid-template-columns: 24px 1fr 30px; }
+  .task-item { grid-template-columns: 24px 1fr 36px; }
   /* Place children in explicit columns to avoid vertical stacking */
   .task-item > .drag-handle { grid-column: 3; }
   .task-item > .checkbox-wrap { grid-column: 1; }
@@ -275,7 +277,7 @@ h1 { margin: 10px 0 12px; font-size: 18px; }
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 30px;
+    width: 36px;
     height: 100%;
     color: var(--muted);
     touch-action: none;
