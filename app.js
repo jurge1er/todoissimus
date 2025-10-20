@@ -74,7 +74,7 @@ let state = {
   orderKey: '',
   activePointerId: null,
   projects: new Map(),
-  drag: { srcEl: null, srcId: null, indicator: null },
+  drag: { srcEl: null, srcId: null, indicator: null, placeholder: null },
 };
 
 // Prefer Pointer Events; fall back to Touch on older browsers
@@ -187,46 +187,46 @@ async function updateAppNow() {
 
 // API helpers
 async function api(path, { method = 'GET', token, body } = {}) {
-  // Prefer proxy (works on Render and avoids CORS). If proxy fails locally (e.g., 5xx),
-  // fall back to direct Todoist API when running on localhost and a token is available.
+  // On localhost with a token, try direct Todoist first (fast path, avoids local proxy issues).
+  // Otherwise (or on failure), use the proxy. On Render, proxy remains the primary path.
   const isLocal = (() => { try { return /^(localhost|127\.|0\.0\.0\.0)$/.test(location.hostname); } catch (_) { return false; } })();
 
-  const proxyHeaders = { 'Content-Type': 'application/json' };
-  if (token) proxyHeaders['X-Auth-Token'] = token;
-  const proxyUrl = `${PROXY_BASE}${path}`;
-  try {
-    const res = await fetch(proxyUrl, {
-      method,
-      headers: proxyHeaders,
-      body: body ? JSON.stringify(body) : undefined,
-    });
+  const tryDirect = async () => {
+    const directHeaders = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+    const directUrl = `${API_BASE}${path}`;
+    const res = await fetch(directUrl, { method, headers: directHeaders, body: body ? JSON.stringify(body) : undefined });
     if (!res.ok) {
-      // If proxy errored and we can try direct on localhost with a token, do so.
-      if (isLocal && token && res.status >= 500) throw new Error(`Proxy ${res.status}`);
+      const text = await res.text().catch(() => '');
+      throw new Error(`Direct ${method} ${path} failed ${res.status}: ${text}`);
+    }
+    if (res.status === 204) return null;
+    const ct = res.headers.get('content-type') || '';
+    return ct.includes('application/json') ? res.json() : res.text();
+  };
+
+  const tryProxy = async () => {
+    const proxyHeaders = { 'Content-Type': 'application/json' };
+    if (token) proxyHeaders['X-Auth-Token'] = token;
+    const proxyUrl = `${PROXY_BASE}${path}`;
+    const res = await fetch(proxyUrl, { method, headers: proxyHeaders, body: body ? JSON.stringify(body) : undefined });
+    if (!res.ok) {
       const text = await res.text().catch(() => '');
       throw new Error(`API ${method} ${path} failed ${res.status}: ${text}`);
     }
     if (res.status === 204) return null;
     const ct = res.headers.get('content-type') || '';
     return ct.includes('application/json') ? res.json() : res.text();
-  } catch (err) {
-    // Fallback to direct Todoist API on localhost if token provided
-    if (!(isLocal && token)) throw err;
-    const directHeaders = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
-    const directUrl = `${API_BASE}${path}`;
-    const res2 = await fetch(directUrl, {
-      method,
-      headers: directHeaders,
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    if (!res2.ok) {
-      const text2 = await res2.text().catch(() => '');
-      throw new Error(`Direct ${method} ${path} failed ${res2.status}: ${text2}`);
+  };
+
+  if (isLocal && token) {
+    try {
+      return await tryDirect();
+    } catch (_) {
+      // Fall back to proxy if direct fails (e.g., CORS/network)
+      return tryProxy();
     }
-    if (res2.status === 204) return null;
-    const ct2 = res2.headers.get('content-type') || '';
-    return ct2.includes('application/json') ? res2.json() : res2.text();
   }
+  return tryProxy();
 }
 
 async function getTasksByLabel(label, token) {
@@ -492,6 +492,27 @@ function renderTasks(tasks) {
       }
       return state.drag.indicator;
     }
+    function ensurePlaceholder(refEl) {
+      if (!state.drag.placeholder) {
+        const ph = document.createElement('li');
+        ph.className = 'drag-placeholder';
+        try { ph.style.height = `${refEl ? refEl.offsetHeight : 44}px`; } catch(_) {}
+        state.drag.placeholder = ph;
+      }
+      return state.drag.placeholder;
+    }
+    function getMarker(refEl){ return state.drag.placeholder || state.drag.indicator || ensureIndicator(refEl); }
+    function positionMarkerAtY(clientY) {
+      const marker = getMarker();
+      const items = Array.from(els.list.children).filter(el => el.classList && el.classList.contains('task-item') && el !== state.drag.srcEl);
+      if (!items.length) { els.list.appendChild(marker); return; }
+      for (const item of items) {
+        const r = item.getBoundingClientRect();
+        const mid = r.top + r.height / 2;
+        if (clientY < mid) { els.list.insertBefore(marker, item); return; }
+      }
+      els.list.appendChild(marker);
+    }
 
     function preventTouchMove(e){ try { e.preventDefault(); } catch(_){} }
 
@@ -514,6 +535,10 @@ function renderTasks(tasks) {
       document.addEventListener('touchmove', preventTouchMove, { passive: false });
       try { document.documentElement.classList.add('drag-active'); } catch(_) {}
       try { document.body.classList.add('drag-active'); } catch(_) {}
+      // Insert placeholder at current position and hide the item (no layout jump)
+      const ph = ensurePlaceholder(li);
+      els.list.insertBefore(ph, li);
+      li.style.visibility = 'hidden';
       // Insert indicator at current pointer Y and hide the item (keep layout space to avoid jump)
       const ind = ensureIndicator();
       positionIndicatorAtY(lastY || (li.getBoundingClientRect().top + 1));
@@ -532,8 +557,8 @@ function renderTasks(tasks) {
         else if (lastY > h - edge) delta = step;
         if (delta !== 0) {
           window.scrollBy(0, delta);
-          // Also update indicator while scrolling continues
-          try { positionIndicatorAtY(lastY); } catch(_){}
+          // Also update marker while scrolling continues
+          try { positionMarkerAtY(lastY); } catch(_){}
         }
         scrollRAF = requestAnimationFrame(autoScrollLoop);
       }
@@ -555,7 +580,7 @@ function renderTasks(tasks) {
       // During drag: update indicator and prevent scroll
       try { ev.preventDefault(); } catch (_) {}
       dragMoved = true;
-      positionIndicatorAtY(ev.clientY);
+      positionMarkerAtY(ev.clientY);
     }
 
     function onPointerUp() {
@@ -573,8 +598,11 @@ function renderTasks(tasks) {
       if (scrollRAF) { try { cancelAnimationFrame(scrollRAF); } catch(_){} scrollRAF = 0; }
       if (!pointerDragging) return; // treated as tap/scroll
       pointerDragging = false;
-      // Place item at indicator (or restore if none)
-      if (state.drag.indicator) {
+      // Place item at marker (placeholder preferred)
+      if (state.drag.placeholder) {
+        els.list.insertBefore(li, state.drag.placeholder);
+        if (state.drag.placeholder.parentNode) state.drag.placeholder.parentNode.removeChild(state.drag.placeholder);
+      } else if (state.drag.indicator) {
         els.list.insertBefore(li, state.drag.indicator);
         if (state.drag.indicator.parentNode) state.drag.indicator.parentNode.removeChild(state.drag.indicator);
       }
@@ -584,6 +612,7 @@ function renderTasks(tasks) {
       state.drag.srcEl = null;
       state.drag.srcId = null;
       state.drag.indicator = null;
+      state.drag.placeholder = null;
       // Restore default touch behavior
       try { document.body.style.touchAction = ''; } catch (_) {}
       try { document.documentElement.style.overscrollBehaviorY = ''; } catch (_) {}
