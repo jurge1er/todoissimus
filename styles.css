@@ -18,6 +18,8 @@ body {
   color: var(--text);
   font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Noto Sans', 'Helvetica Neue', Arial, 'Apple Color Emoji', 'Segoe UI Emoji';
 }
+/* Prevent mobile pull-to-refresh and bounce during interactions */
+html, body { overscroll-behavior-y: contain; overscroll-behavior-x: none; }
 
 .hidden { display: none !important; }
 

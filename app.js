@@ -325,6 +325,8 @@ function renderTasks(tasks) {
     let pointerDragging = false;
     function onPointerMove(ev) {
       if (!pointerDragging) return;
+      // Prevent page scrolling or pull-to-refresh while dragging
+      try { ev.preventDefault(); } catch (_) {}
       const overEl = document.elementFromPoint(ev.clientX, ev.clientY);
       if (!overEl) return;
       const overItem = overEl.closest && overEl.closest('.task-item');
@@ -350,15 +352,24 @@ function renderTasks(tasks) {
       state.drag.indicator = null;
       document.removeEventListener('pointermove', onPointerMove);
       document.removeEventListener('pointerup', onPointerUp);
+      // Restore default touch behavior
+      try { document.body.style.touchAction = ''; } catch (_) {}
+      try { document.documentElement.style.overscrollBehaviorY = ''; } catch (_) {}
       const ids = Array.from(els.list.querySelectorAll('.task-item')).map(x => x.dataset.id);
       storage.setOrder(state.label, ids);
     }
     handle.addEventListener('pointerdown', (ev) => {
       if (isInteractive(ev.target)) return;
+      // Prevent page scroll/pull-to-refresh as drag starts
+      try { ev.preventDefault(); } catch (_) {}
       pointerDragging = true;
       li.classList.add('dragging');
       state.drag.srcEl = li;
       state.drag.srcId = t.id;
+      // Capture pointer and disable default touch gestures while dragging
+      try { ev.target.setPointerCapture(ev.pointerId); } catch (_) {}
+      try { document.body.style.touchAction = 'none'; } catch (_) {}
+      try { document.documentElement.style.overscrollBehaviorY = 'contain'; } catch (_) {}
       // Insert indicator at current position and hide the item
       const next = li.nextSibling;
       const ind = state.drag.indicator || (state.drag.indicator = (() => { const el = document.createElement('li'); el.className='drop-indicator'; return el })());
