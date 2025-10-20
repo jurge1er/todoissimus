@@ -328,12 +328,13 @@ function renderTasks(tasks) {
       // Prevent page scrolling or pull-to-refresh while dragging
       try { ev.preventDefault(); } catch (_) {}
       const overEl = document.elementFromPoint(ev.clientX, ev.clientY);
-      if (!overEl) return;
+      const ind = state.drag.indicator || (state.drag.indicator = (() => { const el = document.createElement('li'); el.className='drop-indicator'; return el })());
+      if (!overEl) { els.list.appendChild(ind); return; }
       const overItem = overEl.closest && overEl.closest('.task-item');
-      if (!overItem || overItem === state.drag.srcEl) return;
+      if (!overItem) { els.list.appendChild(ind); return; }
+      if (overItem === state.drag.srcEl) return;
       const rect = overItem.getBoundingClientRect();
       const before = (ev.clientY - rect.top) < rect.height / 2;
-      const ind = state.drag.indicator || (state.drag.indicator = (() => { const el = document.createElement('li'); el.className='drop-indicator'; return el })());
       if (before) els.list.insertBefore(ind, overItem);
       else els.list.insertBefore(ind, overItem.nextSibling);
     }
@@ -366,8 +367,7 @@ function renderTasks(tasks) {
       li.classList.add('dragging');
       state.drag.srcEl = li;
       state.drag.srcId = t.id;
-      // Capture pointer and disable default touch gestures while dragging
-      try { ev.target.setPointerCapture(ev.pointerId); } catch (_) {}
+      // Disable default touch gestures while dragging
       try { document.body.style.touchAction = 'none'; } catch (_) {}
       try { document.documentElement.style.overscrollBehaviorY = 'contain'; } catch (_) {}
       // Insert indicator at current position and hide the item
@@ -375,7 +375,7 @@ function renderTasks(tasks) {
       const ind = state.drag.indicator || (state.drag.indicator = (() => { const el = document.createElement('li'); el.className='drop-indicator'; return el })());
       if (next) els.list.insertBefore(ind, next); else els.list.appendChild(ind);
       li.style.display = 'none';
-      document.addEventListener('pointermove', onPointerMove);
+      document.addEventListener('pointermove', onPointerMove, { passive: false });
       document.addEventListener('pointerup', onPointerUp);
     });
 
