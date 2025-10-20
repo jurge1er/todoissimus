@@ -187,23 +187,46 @@ async function updateAppNow() {
 
 // API helpers
 async function api(path, { method = 'GET', token, body } = {}) {
-  // Always use the proxy to avoid CORS issues in browsers (incl. Render).
-  // If a token is provided, send it via X-Auth-Token so the proxy can forward it.
-  const headers = { 'Content-Type': 'application/json' };
-  if (token) headers['X-Auth-Token'] = token;
-  const url = `${PROXY_BASE}${path}`;
-  const res = await fetch(url, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`API ${method} ${path} failed ${res.status}: ${text}`);
+  // Prefer proxy (works on Render and avoids CORS). If proxy fails locally (e.g., 5xx),
+  // fall back to direct Todoist API when running on localhost and a token is available.
+  const isLocal = (() => { try { return /^(localhost|127\.|0\.0\.0\.0)$/.test(location.hostname); } catch (_) { return false; } })();
+
+  const proxyHeaders = { 'Content-Type': 'application/json' };
+  if (token) proxyHeaders['X-Auth-Token'] = token;
+  const proxyUrl = `${PROXY_BASE}${path}`;
+  try {
+    const res = await fetch(proxyUrl, {
+      method,
+      headers: proxyHeaders,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) {
+      // If proxy errored and we can try direct on localhost with a token, do so.
+      if (isLocal && token && res.status >= 500) throw new Error(`Proxy ${res.status}`);
+      const text = await res.text().catch(() => '');
+      throw new Error(`API ${method} ${path} failed ${res.status}: ${text}`);
+    }
+    if (res.status === 204) return null;
+    const ct = res.headers.get('content-type') || '';
+    return ct.includes('application/json') ? res.json() : res.text();
+  } catch (err) {
+    // Fallback to direct Todoist API on localhost if token provided
+    if (!(isLocal && token)) throw err;
+    const directHeaders = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+    const directUrl = `${API_BASE}${path}`;
+    const res2 = await fetch(directUrl, {
+      method,
+      headers: directHeaders,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!res2.ok) {
+      const text2 = await res2.text().catch(() => '');
+      throw new Error(`Direct ${method} ${path} failed ${res2.status}: ${text2}`);
+    }
+    if (res2.status === 204) return null;
+    const ct2 = res2.headers.get('content-type') || '';
+    return ct2.includes('application/json') ? res2.json() : res2.text();
   }
-  if (res.status === 204) return null;
-  const ct = res.headers.get('content-type') || '';
-  return ct.includes('application/json') ? res.json() : res.text();
 }
 
 async function getTasksByLabel(label, token) {
