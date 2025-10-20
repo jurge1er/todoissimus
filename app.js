@@ -655,6 +655,8 @@ function renderTasks(tasks) {
       // During long-press window, block text selection but allow scroll; disable list panning
       try { document.documentElement.classList.add('drag-select-block'); } catch(_) {}
       try { document.body.classList.add('drag-select-block'); } catch(_) {}
+      try { document.documentElement.classList.add('drag-active'); } catch(_) {}
+      try { document.body.classList.add('drag-active'); } catch(_) {}
       try { els.list.classList.add('drag-lock'); } catch(_) {}
       });
     }
