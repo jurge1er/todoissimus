@@ -140,29 +140,6 @@ h1 { margin: 10px 0 12px; font-size: 18px; }
 .drag-handle { display: none; }
 .drag-handle { z-index: 1; }
 
-/* Touch devices: three columns (checkbox | content | handle right full-height) */
-@media (pointer: coarse) {
-  .task-item { grid-template-columns: 24px 1fr 40px; }
-  .task-item > .checkbox-wrap { grid-column: 1; align-self: center; justify-self: center; }
-  .task-item > .task-main { grid-column: 2; }
-  .task-item > .drag-handle { grid-column: 3; }
-  .drag-handle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 100%;
-    color: var(--muted);
-    touch-action: none;
-    user-select: none;
-    -webkit-user-select: none;
-    /* align-self: stretch;*/
-  }
-  /* Meta bottom-right within task-main on touch */
-  .task-main { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; align-items: start; }
-  .task-main > .task-content { grid-column: 1 / span 2; grid-row: 1; }
-  .task-main > .task-meta { grid-column: 2; grid-row: 2; justify-self: end; align-self: end; }
-}
 .checkbox-wrap { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid var(--border); }
 .task-checkbox { width: 14px; height: 14px; }
 .task-item.prio-1 .checkbox-wrap { border-color: var(--prio1); }
@@ -232,12 +209,12 @@ h1 { margin: 10px 0 12px; font-size: 18px; }
 
 /* Force touch layout via JS flag to avoid unreliable media queries on some devices */
 .is-touch .task-item { grid-template-columns: 24px 1fr 32px; padding: 8px 6px; gap: 6px; }
-.is-touch .task-item > .checkbox-wrap { grid-column: 1; align-self: center; justify-self: center; }
+.is-touch .task-item > .checkbox-wrap { grid-column: 1; align-self: center; justify-self: center; transform: translateY(-1px); }
 .is-touch .task-item > .task-main { grid-column: 2; }
 .is-touch .task-item > .drag-handle { grid-column: 3; }
 .is-touch .drag-handle { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 28px; color: var(--muted); touch-action: none; user-select: none; -webkit-user-select: none; align-self: center; }
 .is-touch .task-main { display: grid; grid-template-columns: 1fr auto; grid-template-rows: 1fr auto; align-items: stretch; }
-.is-touch .task-main > .task-content { grid-column: 1 / span 2; grid-row: 1; align-self: center; }
+.is-touch .task-main > .task-content { grid-column: 1 / span 2; grid-row: 1; align-self: center; transform: translateY(-1px); }
 .is-touch .task-main > .task-meta { grid-column: 2; grid-row: 2; justify-self: end; align-self: end; }
 
 /* Red insertion indicator for drag & drop */
@@ -273,30 +250,3 @@ h1 { margin: 10px 0 12px; font-size: 18px; }
   .pill { font-size: 11px; padding: 2px 6px; }
 }
 
-/* On touch devices, show drag handle on the right and add handle column */
-@media (pointer: coarse) {
-  .task-item { grid-template-columns: 24px 1fr 32px; padding: 8px 6px; gap: 6px; }
-  /* Place children in explicit columns to avoid vertical stacking */
-  .task-item > .drag-handle { grid-column: 3; }
-  .task-item > .checkbox-wrap { grid-column: 1; align-self: center; justify-self: center; }
-  .task-item > .task-main { grid-column: 2; }
-  .drag-handle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 28px;
-    color: var(--muted);
-    touch-action: none;
-    user-select: none;
-    -webkit-user-select: none;
-    align-self: center;
-  }
-  /* Task main internal layout: title centered (row 1), meta bottom-right (row 2) */
-  .task-main { display: grid; grid-template-columns: 1fr auto; grid-template-rows: 1fr auto; align-items: stretch; }
-  .task-main > .task-content { grid-column: 1 / span 2; grid-row: 1; align-self: center; }
-  .task-main > .task-meta { grid-column: 2; grid-row: 2; justify-self: end; align-self: end; }
-  /* Fine alignment tweaks */
-  .task-item > .checkbox-wrap { transform: translateY(-1px); }
-  .task-main > .task-content { transform: translateY(-1px); }
-}

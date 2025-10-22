@@ -84,6 +84,8 @@ const IS_TOUCH = (() => {
     return (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
   } catch (_) { return false; }
 })();
+// Apply a CSS hook for touch layout; keeps layout rules centralized in .is-touch
+try { document.documentElement.classList.toggle('is-touch', IS_TOUCH); } catch (_) {}
 
 // Safely cancel any active drag and restore hidden elements
 function cancelActiveDrag() {
