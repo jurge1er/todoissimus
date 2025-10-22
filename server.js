@@ -100,6 +100,12 @@ app.get('/api/comments', (req, res) => {
   return forward(req, res, url);
 });
 
+// Filters proxy (list saved Todoist filters)
+app.get('/api/filters', (req, res) => {
+  const url = `${API_BASE}/filters`;
+  return forward(req, res, url);
+});
+
 app.get('/api/labels', (req, res) => {
   const url = `${API_BASE}/labels`;
   return forward(req, res, url);

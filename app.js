@@ -326,8 +326,9 @@ async function getLabels(token) {
   return api('/labels', { token });
 }
 
+// Todoist REST v2 bietet keine Filters-Liste; nutze lokale Liste
 async function getFilters(token) {
-  return api('/filters', { token });
+  try { return JSON.parse(localStorage.getItem('todoissimus_filters_list')||'[]'); } catch { return []; }
 }
 
 // Rendering & interaction
@@ -430,8 +431,13 @@ function renderTasks(tasks) {
       descBtn.className = 'task-desc pill';
       descBtn.title = 'Beschreibung anzeigen';
       descBtn.textContent = 'Beschreibung';
+      try { descBtn.dataset.descContent = desc; } catch (_) {}
       meta.insertBefore(descBtn, meta.firstChild);
+      // block drag from stealing the gesture, then open overlay
+      descBtn.addEventListener('pointerdown', (e) => { try { e.preventDefault(); } catch(_) {}; e.stopPropagation(); }, { passive: false });
       descBtn.addEventListener('click', (e) => { e.stopPropagation(); showDescriptionPopup(desc); });
+      descBtn.addEventListener('pointerup', (e) => { e.stopPropagation(); showDescriptionPopup(desc); });
+      descBtn.addEventListener('pointerup', (e) => { e.stopPropagation(); showDescriptionPopup(desc); });
     }
     // Comments pill (async)
     (async () => {
@@ -443,14 +449,69 @@ function renderTasks(tasks) {
           cbtn.title = 'Kommentare anzeigen';
           cbtn.textContent = `Kommentare (${comments.length})`;
           meta.insertBefore(cbtn, meta.firstChild);
+          const joined = (comments || []).map(c => {
+            let s = (c && c.content ? String(c.content) : '').trim();
+            if (!s && c && c.attachment) {
+              const a = c.attachment;
+              s = (a.file_name || a.url || a.resource_type || '[Anhang]').toString();
+              if (a.file_type) s += ` (${a.file_type})`;
+            }
+            if (!s) s = '[Kommentar ohne Text]';
+            return s;
+          }).join('\\n\\n');
+          try { cbtn.dataset.commentsText = joined; } catch(_) {}
+          // block drag from stealing the gesture
+          cbtn.addEventListener('pointerdown', (e) => { try { e.preventDefault(); } catch(_) {}; e.stopPropagation(); }, { passive: false });
           cbtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const text = comments.map(c => (c.content || '')).join('\n\n');
-            showDescriptionPopup(text || 'Keine Kommentare');
+            showDescriptionPopup(joined || 'Keine Kommentare');
+          });
+          cbtn.addEventListener('pointerup', (e) => {
+            e.stopPropagation();
+            showDescriptionPopup(joined || 'Keine Kommentare');
           });
         }
       } catch (_) {}
     })();
+
+    // Safety: delegate clicks on meta to ensure overlay opens
+    if (meta && !meta._descBound) {
+      meta.addEventListener('click', (ev) => {
+        const btn = (ev.target && ev.target.closest) ? ev.target.closest('.task-desc, .pill') : null;
+        if (!btn || !meta.contains(btn)) return;
+        // Beschreibung
+        if (btn.classList.contains('task-desc')) {
+          ev.stopPropagation();
+          const txt = (btn.dataset && btn.dataset.descContent) || (t.description || '');
+          showDescriptionPopup((txt || '').trim());
+          return;
+        }
+        // Kommentare
+        if (btn.classList.contains('pill') && btn.textContent && btn.textContent.trim().startsWith('Kommentare')) {
+          ev.stopPropagation();
+          const stored = (btn.dataset && btn.dataset.commentsText) || '';
+          if (stored) { showCommentsPopup(stored, t); return; }
+          // Fallback: lade on-demand
+          (async () => {
+            try {
+              const comments = await getComments(t.id, state.token);
+              const text = (comments || []).map(c => {
+                let s = (c && c.content ? String(c.content) : '').trim();
+                if (!s && c && c.attachment) {
+                  const a = c.attachment;
+                  s = (a.file_name || a.url || a.resource_type || '[Anhang]').toString();
+                  if (a.file_type) s += ` (${a.file_type})`;
+                }
+                if (!s) s = '[Kommentar ohne Text]';
+                return s;
+              }).join('\\n\\n') || 'Keine Kommentare';
+              showCommentsPopup(text, t);
+            } catch (_) { showDescriptionPopup('Keine Kommentare'); }
+          })();
+        }
+      });
+      meta._descBound = true;
+    }
 
     checkbox.addEventListener('change', async (e) => {
       checkbox.disabled = true;
@@ -1085,3 +1146,26 @@ els.addTaskBtn.addEventListener('click', async () => {
 // Start
 try { (function(){ const input=document.getElementById('filter'); if(!input) return; let dl=document.getElementById('filters-list'); if(!dl){ dl=document.createElement('datalist'); dl.id='filters-list'; input.setAttribute('list','filters-list'); (input.parentElement||document.body).appendChild(dl);} dl.innerHTML=''; let list=[]; try{ list=JSON.parse(localStorage.getItem('todoissimus_filters_list')||'[]'); }catch{} for(const f of list){ const opt=document.createElement('option'); opt.value=f; dl.appendChild(opt);} })(); } catch {}
 load();
+try {
+  document.addEventListener('click', (ev) => {
+    const origin = ev.target && ev.target.closest ? ev.target.closest('.task-desc, .pill') : null;
+    if ( !origin) return; 
+    const metaWrap = origin.closest && origin.closest('.task-meta');
+    if ( !metaWrap) return; 
+    if (origin.classList.contains('task-desc')) {
+      ev.stopPropagation();
+      const txt = (origin.dataset && origin.dataset.descContent) || '';
+      showDescriptionPopup((txt || '').trim());
+      return;
+    }
+    if (origin.classList.contains('pill')) {
+      const hasData = origin.dataset && ('commentsText' in origin.dataset);
+      const looksLike = origin.textContent && origin.textContent.trim().startsWith('Kommentare');
+      if (hasData || looksLike) {
+        ev.stopPropagation();
+        const text = (hasData && origin.dataset.commentsText) ? origin.dataset.commentsText : '';
+        showDescriptionPopup(text || 'Keine Kommentare');
+      }
+    }
+  }, { capture: true });
+} catch {}

@@ -138,6 +138,7 @@ h1 { margin: 10px 0 12px; font-size: 18px; }
 .task-item.dragging, .task-item.dragging * { -webkit-user-select: none; user-select: none; }
 /* Hide legacy drag handle; dragging works anywhere on the item */
 .drag-handle { display: none; }
+.drag-handle { z-index: 1; }
 
 /* Touch devices: three columns (checkbox | content | handle right full-height) */
 @media (pointer: coarse) {
@@ -172,6 +173,8 @@ h1 { margin: 10px 0 12px; font-size: 18px; }
 .task-content { padding: 4px 6px; border-radius: 6px; }
 .task-content[contenteditable="true"] { outline: 1px solid var(--border); background: #1b1b1b; }
 .task-meta { display: flex; gap: 6px; align-items: center; }
+.task-meta { position: relative; z-index: 5; }
+.task-meta .pill, .task-desc { pointer-events: auto; cursor: pointer; }
 .task-meta .save { background: var(--accent); border-color: #c13f34; }
 
 .empty { color: var(--muted); text-align: center; padding: 14px; }

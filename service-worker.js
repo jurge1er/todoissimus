@@ -1,4 +1,4 @@
-const CACHE_NAME = 'todoissimus-cache-v7b';
+const CACHE_NAME = 'todoissimus-cache-v11';
 const ASSETS = [
   '/',
   '/index.html',
@@ -47,21 +47,33 @@ self.addEventListener('fetch', (event) => {
       );
       return;
     }
-    // Ensure updated app.js is fetched when available (network-first)
+    // Ensure updated app.js/styles.css are fetched when available (network-first)
     if (url.pathname === '/app.js' || url.pathname === '/styles.css') {
       event.respondWith(
-        fetch(req)
-          .then((res) => {
+        (async () => {
+          // Normalize to pathname (ignore any ?v= cache-busters)
+          const normalized = new Request(url.pathname, { headers: req.headers, mode: req.mode, credentials: 'same-origin' });
+          try {
+            const res = await fetch(normalized);
             const resClone = res.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone)).catch(() => {});
+            caches.open(CACHE_NAME).then((cache) => cache.put(normalized, resClone)).catch(() => {});
             return res;
-          })
-          .catch(() => caches.match(req))
+          } catch (e) {
+            const cached = await caches.match(normalized);
+            return cached || Promise.reject(e);
+          }
+        })()
       );
       return;
     }
 
-    event.respondWith(caches.match(req).then((cached) => cached || fetch(req)));
+    // Default: try exact request first, then normalized without query
+    event.respondWith((async () => {
+      const exact = await caches.match(req);
+      if (exact) return exact;
+      const noQ = await caches.match(new Request(url.pathname));
+      return noQ || fetch(req);
+    })());
   }
 });
 
