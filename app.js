@@ -144,13 +144,19 @@ function ensureDescOverlay() {
     </div>`;
   document.body.appendChild(root);
   const close = () => root.classList.add('hidden');
-  root.addEventListener('click', (e) => { if (e.target === root) close(); });
+  root.addEventListener('click', (e) => {
+    if (e.target !== root) return;
+    const openedAt = Number((root.dataset && root.dataset.openedAt) || 0);
+    if (Date.now() - openedAt < 250) return;
+    close();
+  });
   root.querySelector('.desc-close').addEventListener('click', close);
   return root;
 }
 function showDescriptionPopup(text) {
   const root = ensureDescOverlay();
   root.querySelector('.desc-content').textContent = text || '';
+  try { root.dataset.openedAt = String(Date.now()); } catch {}
   root.classList.remove('hidden');
 }
 
