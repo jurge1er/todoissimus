@@ -92,6 +92,14 @@ app.get('/api/projects', (req, res) => {
   return forward(req, res, url);
 });
 
+// Comments proxy (list comments for a task_id)
+app.get('/api/comments', (req, res) => {
+  const { task_id } = req.query;
+  const qs = task_id ? `?task_id=${encodeURIComponent(task_id)}` : '';
+  const url = `${API_BASE}/comments${qs}`;
+  return forward(req, res, url);
+});
+
 app.get('/api/labels', (req, res) => {
   const url = `${API_BASE}/labels`;
   return forward(req, res, url);

@@ -204,44 +204,6 @@ function hideDragOverlay() {
   ov.style.display = 'none';
 }
 
-// Lightweight description overlay
-function ensureDescOverlay() {
-  let root = document.getElementById('desc-overlay');
-  if (root) {
-    const content = root.querySelector('.desc-content');
-    const closeBtn = root.querySelector('.desc-close');
-    return { root, content, closeBtn };
-  }
-  root = document.createElement('div');
-  root.id = 'desc-overlay';
-  root.className = 'desc-modal hidden';
-  root.innerHTML = `
-    <div class="desc-box" role="dialog" aria-modal="true" aria-labelledby="desc-title">
-      <div class="desc-header">
-        <div id="desc-title" class="desc-title">Beschreibung</div>
-        <button class="desc-close" aria-label="Schließen">Schließen</button>
-      </div>
-      <div class="desc-content"></div>
-    </div>`;
-  document.body.appendChild(root);
-  const content = root.querySelector('.desc-content');
-  const closeBtn = root.querySelector('.desc-close');
-  const onBgClick = (e) => {
-    if (e.target === root) root.classList.add('hidden');
-  };
-  const onClose = () => root.classList.add('hidden');
-  closeBtn.addEventListener('click', onClose);
-  root.addEventListener('click', onBgClick);
-  window.addEventListener('keydown', (e) => { if (e.key === 'Escape') onClose(); });
-  return { root, content, closeBtn };
-}
-
-function showDescriptionPopup(text) {
-  const { root, content } = ensureDescOverlay();
-  content.textContent = text || '';
-  root.classList.remove('hidden');
-}
-
 function setTitleByState() {
   const m = state.mode || 'label';
   if (m === 'project') {
@@ -489,24 +451,6 @@ function renderTasks(tasks) {
         }
       } catch (_) {}
     })();
-
-    // Description indicator and popup
-    const desc = (t.description || '').trim();
-    if (desc && meta) {
-      const descBtn = document.createElement('span');
-      descBtn.className = 'task-desc pill';
-      descBtn.title = 'Beschreibung anzeigen';
-      descBtn.textContent = 'Beschreibung';
-      // place description before project pill if present, else before open button
-      const projectPill = projectEl && projectEl.parentNode === meta ? projectEl : null;
-      if (projectPill) meta.insertBefore(descBtn, projectPill);
-      else if (openBtn && openBtn.parentNode === meta) meta.insertBefore(descBtn, openBtn);
-      else meta.appendChild(descBtn);
-      descBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        showDescriptionPopup(desc);
-      });
-    }
 
     checkbox.addEventListener('change', async (e) => {
       checkbox.disabled = true;
