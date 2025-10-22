@@ -79,7 +79,11 @@ let state = {
 
 // Prefer Pointer Events; fall back to Touch on older browsers
 const SUPPORTS_POINTER = typeof window !== 'undefined' && 'PointerEvent' in window;
-const IS_TOUCH = (() => { try { return (('ontouchstart' in window) || (navigator.maxTouchPoints > 0)); } catch (_) { return false; } })();
+const IS_TOUCH = (() => {
+  try {
+    return (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+  } catch (_) { return false; }
+})();
 
 // Safely cancel any active drag and restore hidden elements
 function cancelActiveDrag() {
@@ -110,6 +114,74 @@ function toast(msg) {
   console.log('[Todoissimus]', msg);
 }
 
+// Comments API helpers (proxy first, fallback to direct when token present)
+async function getComments(taskId, token) {
+  const path = `/comments?task_id=${encodeURIComponent(taskId)}`;
+  try {
+    return await api(path, { token });
+  } catch (e) {
+    if (!token) throw e;
+    const res = await fetch(`${API_BASE}${path}`, { headers: { 'Authorization': `Bearer ${token}` } });
+    if (!res.ok) throw new Error(`comments ${res.status}`);
+    return res.json();
+  }
+}
+
+// Simple overlay to show descriptions/comments
+function ensureDescOverlay() {
+  let root = document.getElementById('desc-overlay');
+  if (root) return root;
+  root = document.createElement('div');
+  root.id = 'desc-overlay';
+  root.className = 'desc-modal hidden';
+  root.innerHTML = `
+    <div class="desc-box" role="dialog" aria-modal="true" aria-labelledby="desc-title">
+      <div class="desc-header">
+        <div id="desc-title" class="desc-title">Details</div>
+        <button class="desc-close" aria-label="Schließen">Schließen</button>
+      </div>
+      <div class="desc-content"></div>
+    </div>`;
+  document.body.appendChild(root);
+  const close = () => root.classList.add('hidden');
+  root.addEventListener('click', (e) => { if (e.target === root) close(); });
+  root.querySelector('.desc-close').addEventListener('click', close);
+  return root;
+}
+function showDescriptionPopup(text) {
+  const root = ensureDescOverlay();
+  root.querySelector('.desc-content').textContent = text || '';
+  root.classList.remove('hidden');
+}
+
+// Saved filters list (for datalist)
+const filterStoreKey = 'todoissimus_filters_list';
+function getSavedFilters() { try { return JSON.parse(localStorage.getItem(filterStoreKey) || '[]'); } catch { return []; } }
+function saveFilterValue(val) {
+  const v = (val || '').trim();
+  if (!v) return;
+  const list = getSavedFilters();
+  if (!list.includes(v)) {
+    list.unshift(v);
+    localStorage.setItem(filterStoreKey, JSON.stringify(list.slice(0, 50)));
+  }
+}
+function ensureFilterDatalist() {
+  const input = document.getElementById('filter');
+  if (!input) return;
+  let dl = document.getElementById('filters-list');
+  if (!dl) {
+    dl = document.createElement('datalist');
+    dl.id = 'filters-list';
+    input.setAttribute('list', 'filters-list');
+    (input.parentElement || document.body).appendChild(dl);
+  }
+  dl.innerHTML = '';
+  for (const f of getSavedFilters()) {
+    const opt = document.createElement('option');
+    opt.value = f; dl.appendChild(opt);
+  }
+}
 // Drag overlay helpers to block native scroll and capture input
 function ensureDragOverlay() {
   if (state.drag.overlay && document.body.contains(state.drag.overlay)) return state.drag.overlay;
@@ -389,6 +461,34 @@ function renderTasks(tasks) {
       const projName = state.projects.get(String(t.project_id)) || '';
       projectEl.textContent = projName;
     }
+    // Description pill
+    const desc = (t.description || '').trim();
+    if (desc && meta) {
+      const descBtn = document.createElement('span');
+      descBtn.className = 'task-desc pill';
+      descBtn.title = 'Beschreibung anzeigen';
+      descBtn.textContent = 'Beschreibung';
+      meta.insertBefore(descBtn, meta.firstChild);
+      descBtn.addEventListener('click', (e) => { e.stopPropagation(); showDescriptionPopup(desc); });
+    }
+    // Comments pill (async)
+    (async () => {
+      try {
+        const comments = await getComments(t.id, state.token);
+        if (comments && comments.length && meta) {
+          const cbtn = document.createElement('span');
+          cbtn.className = 'pill';
+          cbtn.title = 'Kommentare anzeigen';
+          cbtn.textContent = `Kommentare (${comments.length})`;
+          meta.insertBefore(cbtn, meta.firstChild);
+          cbtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const text = comments.map(c => (c.content || '')).join('\n\n');
+            showDescriptionPopup(text || 'Keine Kommentare');
+          });
+        }
+      } catch (_) {}
+    })();
 
     // Description indicator and popup
     const desc = (t.description || '').trim();
@@ -899,6 +999,28 @@ els.saveSettings.addEventListener('click', () => {
   storage.setLabel(label);
   storage.setProjectId(projectId);
   storage.setFilter(filter);
+  // remember filter in a saved list (for datalist)
+  try {
+    if (filter) {
+      const k = 'todoissimus_filters_list';
+      let list = [];
+      try { list = JSON.parse(localStorage.getItem(k) || '[]'); } catch {}
+      if (!list.includes(filter)) {
+        list.unshift(filter);
+        localStorage.setItem(k, JSON.stringify(list.slice(0, 50)));
+      }
+    }
+  } catch {}
+  // repopulate datalist
+  try {
+    (function(){
+      const input = document.getElementById('filter'); if (!input) return;
+      let dl = document.getElementById('filters-list');
+      if (!dl) { dl = document.createElement('datalist'); dl.id='filters-list'; input.setAttribute('list','filters-list'); (input.parentElement||document.body).appendChild(dl); }
+      dl.innerHTML=''; let list=[]; try{ list=JSON.parse(localStorage.getItem('todoissimus_filters_list')||'[]'); }catch{}
+      for(const f of list){ const opt=document.createElement('option'); opt.value=f; dl.appendChild(opt); }
+    })();
+  } catch {}
   setTitleByState();
   toast('Einstellungen gespeichert.');
 });
@@ -1017,4 +1139,5 @@ els.addTaskBtn.addEventListener('click', async () => {
 });
 
 // Start
+try { (function(){ const input=document.getElementById('filter'); if(!input) return; let dl=document.getElementById('filters-list'); if(!dl){ dl=document.createElement('datalist'); dl.id='filters-list'; input.setAttribute('list','filters-list'); (input.parentElement||document.body).appendChild(dl);} dl.innerHTML=''; let list=[]; try{ list=JSON.parse(localStorage.getItem('todoissimus_filters_list')||'[]'); }catch{} for(const f of list){ const opt=document.createElement('option'); opt.value=f; dl.appendChild(opt);} })(); } catch {}
 load();
