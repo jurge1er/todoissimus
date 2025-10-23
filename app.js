@@ -524,6 +524,24 @@ function renderTasks(tasks) {
     checkbox.addEventListener('change', async (e) => {
       checkbox.disabled = true;
       try {
+        // Versuche, das Etikett @MeinTag vor dem Schließen zu entfernen
+        try {
+          let labels = Array.isArray(t.labels) ? t.labels.slice() : null;
+          if (!labels) {
+            try {
+              const fresh = await api(`/tasks/${t.id}`, { token: state.token });
+              if (fresh && Array.isArray(fresh.labels)) labels = fresh.labels.slice();
+            } catch (_) {}
+          }
+          if (labels && labels.length) {
+            const toRemove = new Set(['MeinTag', '@MeinTag']);
+            const updated = labels.filter(name => !toRemove.has(String(name)));
+            if (updated.length !== labels.length) {
+              try { await updateTask(t.id, { labels: updated }, state.token); } catch (_) {}
+            }
+          }
+        } catch (_) {}
+
         await closeTask(t.id, state.token);
         // Remove locally and persist order sans this id
         state.tasks = state.tasks.filter(x => x.id !== t.id);
