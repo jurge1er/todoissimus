@@ -17,6 +17,8 @@ const storage = {
     try { return JSON.parse(localStorage.getItem(`todoissimus_order_${key}`) || '[]'); } catch { return []; }
   },
   setOrder: (key, order) => localStorage.setItem(`todoissimus_order_${key}`, JSON.stringify(order || [])),
+  getSyncTaskId: () => localStorage.getItem('todoissimus_sync_task_id') || '',
+  setSyncTaskId: (id) => localStorage.setItem('todoissimus_sync_task_id', id ? String(id) : ''),
 };
 
 // DOM elements
@@ -29,7 +31,6 @@ const els = {
   token: document.getElementById('token'),
   label: document.getElementById('label'),
   refresh: document.getElementById('refresh'),
-  shareView: document.getElementById('share-view'),
   settingsActions: document.querySelector('.settings-actions'),
   syncSave: null,
   syncLoad: null,
@@ -66,16 +67,7 @@ const els = {
     els.openTodoistLabel = btn;
     try { console.log('[Todoissimus] Injected Todoist icon button'); } catch (_) {}
   }
-  // Inject Share button if missing
-  let shareBtn = document.getElementById('share-view');
-  if (!shareBtn) {
-    shareBtn = document.createElement('button');
-    shareBtn.id = 'share-view';
-    shareBtn.title = 'Ansicht teilen';
-    shareBtn.textContent = 'Teilen';
-    controls.insertBefore(shareBtn, els.openTodoistLabel || null);
-  }
-  els.shareView = shareBtn;
+  // (Share button removed)
   // Inject Sync buttons into settings actions if possible
   try {
     const actions = document.querySelector('.settings-actions');
@@ -302,31 +294,7 @@ async function loadSyncedState() {
   }
 }
 // Build a shareable URL for the current view (mode + selection + local order)
-function buildShareUrl() {
-  const url = new URL(location.href);
-  url.search = '';
-  const params = new URLSearchParams();
-  const mode = state.mode || storage.getMode() || 'label';
-  params.set('mode', mode);
-  if (mode === 'project') {
-    const pid = String(state.projectId || storage.getProjectId() || '');
-    if (pid) params.set('project', pid);
-  } else if (mode === 'filter') {
-    const f = (state.filter || storage.getFilter() || '').trim();
-    if (f) params.set('filter', f);
-  } else {
-    const l = (state.label || storage.getLabel() || '').trim();
-    if (l) params.set('label', l);
-  }
-  // include order for this view, if any
-  const valueKey = mode === 'project' ? String(state.projectId || storage.getProjectId() || '') : (mode === 'filter' ? String(state.filter || storage.getFilter() || '') : String(state.label || storage.getLabel() || ''));
-  const orderKey = `${mode}:${valueKey}`;
-  const order = (storage.getOrder(orderKey) || []).map(String).filter(Boolean);
-  if (order.length) params.set('order', order.join(','));
-  params.set('v', '1');
-  url.search = params.toString();
-  return url.toString();
-}
+// (Share link feature removed)
 
 // Comments API helpers (proxy first, fallback to direct when token present)
 async function getComments(taskId, token) {
@@ -549,6 +517,12 @@ async function getLabels(token) {
 // Todoist REST v2 bietet keine Filters-Liste; nutze lokale Liste
 async function getFilters(token) {
   try { return JSON.parse(localStorage.getItem('todoissimus_filters_list')||'[]'); } catch { return []; }
+}
+
+// Fetch a single task (used to validate cached Sync task id)
+async function getTaskById(id, token) {
+  if (!id) return null;
+  try { return await api(`/tasks/${encodeURIComponent(id)}`, { token }); } catch (_) { return null; }
 }
 
 // Rendering & interaction
@@ -1324,26 +1298,7 @@ if (els.updateApp) {
 }
 
 // Share current view via URL
-if (els.shareView) {
-  els.shareView.addEventListener('click', async () => {
-    try {
-      const url = buildShareUrl();
-      let copied = false;
-      try {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          await navigator.clipboard.writeText(url);
-          copied = true;
-        }
-      } catch (_) {}
-      if (!copied) {
-        try { window.prompt('Link kopieren:', url); copied = true; } catch (_) {}
-      }
-      toast(copied ? 'Teilen-Link kopiert.' : 'Teilen-Link erstellt.');
-    } catch (e) {
-      toast('Teilen fehlgeschlagen');
-    }
-  });
-}
+// (Share button removed)
 
 // Sync buttons handlers
 if (els.syncSave) {
@@ -1460,6 +1415,75 @@ try {
   }, { capture: true });
 } catch {}
 
+// Override findSyncTask and ensureSyncTaskId to avoid duplicates and cache id
+async function findSyncTask(token) {
+  // 1) Try cached id first
+  try {
+    const cached = storage.getSyncTaskId();
+    if (cached) {
+      const t = await getTaskById(cached, token);
+      if (t && t.id) return t;
+    }
+  } catch (_) {}
+  // 2) Try by label "Ignore"
+  try {
+    const byLabel = await getTasksByFilter('label:Ignore', token);
+    if (Array.isArray(byLabel) && byLabel.length) {
+      const exact = byLabel.find(t => (t && t.content) === SYNC_TASK_CONTENT);
+      if (exact) return exact;
+    }
+  } catch (_) {}
+  // 3) Try by project name "Todoissimus"
+  try {
+    const projects = await getProjects(token).catch(() => []);
+    const target = (projects || []).find(p => String(p.name||'').trim().toLowerCase() === 'todoissimus');
+    if (target && target.id) {
+      const byProject = await getTasksByProject(String(target.id), token);
+      if (Array.isArray(byProject) && byProject.length) {
+        const exact = byProject.find(t => (t && t.content) === SYNC_TASK_CONTENT);
+        if (exact) return exact;
+      }
+    }
+  } catch (_) {}
+  // 4) Fallback text search
+  try {
+    let list = await getTasksByFilter(`search:${SYNC_TASK_CONTENT}`, token);
+    if (!Array.isArray(list) || !list.length) list = await getTasksByFilter(`search:"${SYNC_TASK_CONTENT}"`, token);
+    if (Array.isArray(list) && list.length) {
+      const exact = list.find(t => (t && t.content) === SYNC_TASK_CONTENT);
+      if (exact) return exact;
+      return list[0];
+    }
+  } catch (_) {}
+  return null;
+}
+
+async function ensureSyncTaskId(token, initialState) {
+  // Try existing first
+  const existing = await findSyncTask(token);
+  if (existing && existing.id) { try { storage.setSyncTaskId(String(existing.id)); } catch(_) {} return existing.id; }
+  const desc = initialState ? JSON.stringify(initialState) : '';
+  // Resolve placement: project Todoissimus + label Ignore
+  let projectId = '';
+  let labelName = '';
+  try {
+    const [projects, labels] = await Promise.all([
+      getProjects(token).catch(() => []),
+      getLabels(token).catch(() => []),
+    ]);
+    const target = (projects || []).find(p => String(p.name||'').trim().toLowerCase() === 'todoissimus');
+    if (target && target.id) projectId = String(target.id);
+    const lbl = (labels || []).find(l => String(l.name||'').trim().toLowerCase() === 'ignore');
+    if (lbl && lbl.name) labelName = lbl.name; else labelName = 'Ignore';
+  } catch (_) { labelName = labelName || 'Ignore'; }
+  const payload = { content: SYNC_TASK_CONTENT, description: desc, is_checkable: false };
+  if (projectId) payload.project_id = projectId;
+  if (labelName) payload.labels = [labelName];
+  const created = await createTask(payload, token);
+  try { storage.setSyncTaskId(String(created.id)); } catch(_) {}
+  return created.id;
+}
+
 // Override sync functions to allow proxy token fallback
 // Rationale: If no client token is stored, the server proxy may provide TODOIST_TOKEN.
 // These overrides remove the early bail-out on missing client token.
@@ -1479,7 +1503,7 @@ async function saveSyncedState() {
       }
       if (!labelName) labelName = SYNC_LABEL_NAMES[0];
     } catch(_) { if (!labelName) labelName = SYNC_LABEL_NAMES[0]; }
-    const patch = { description: JSON.stringify(view) };
+    const patch = { description: JSON.stringify(view), is_checkable: false };
     if (labelName) patch.labels = [labelName];
     await updateTask(taskId, patch, token || undefined);
     toast('Ansicht in Todoist gespeichert.');
@@ -1493,6 +1517,7 @@ async function loadSyncedState() {
   try {
     const task = await findSyncTask(token || undefined);
     if (!task) { toast('Kein Sync-Datensatz gefunden.'); return false; }
+    try { if (task && task.id) storage.setSyncTaskId(String(task.id)); } catch(_) {}
     const desc = (task && typeof task.description === 'string') ? task.description : '';
     let data = null;
     try { data = JSON.parse(desc || 'null'); } catch (_) { data = null; }
