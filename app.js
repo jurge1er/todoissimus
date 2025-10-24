@@ -29,6 +29,7 @@ const els = {
   token: document.getElementById('token'),
   label: document.getElementById('label'),
   refresh: document.getElementById('refresh'),
+  shareView: document.getElementById('share-view'),
   listTitle: document.getElementById('list-title'),
   list: document.getElementById('task-list'),
   empty: document.getElementById('empty'),
@@ -51,17 +52,27 @@ const els = {
   if (existing) {
     els.openTodoistLabel = existing;
     try { console.log('[Todoissimus] Using existing Todoist icon button'); } catch (_) {}
-    return;
+  } else {
+    const btn = document.createElement('button');
+    btn.id = 'open-todoist-label';
+    btn.title = 'In Todoist anzeigen';
+    // Icon-only: ASCII to avoid any encoding/font issues
+    btn.textContent = 'T';
+    btn.setAttribute('aria-label', 'In Todoist anzeigen');
+    controls.appendChild(btn);
+    els.openTodoistLabel = btn;
+    try { console.log('[Todoissimus] Injected Todoist icon button'); } catch (_) {}
   }
-  const btn = document.createElement('button');
-  btn.id = 'open-todoist-label';
-  btn.title = 'In Todoist anzeigen';
-  // Icon-only: ASCII to avoid any encoding/font issues
-  btn.textContent = 'T';
-  btn.setAttribute('aria-label', 'In Todoist anzeigen');
-  controls.appendChild(btn);
-  els.openTodoistLabel = btn;
-  try { console.log('[Todoissimus] Injected Todoist icon button'); } catch (_) {}
+  // Inject Share button if missing
+  let shareBtn = document.getElementById('share-view');
+  if (!shareBtn) {
+    shareBtn = document.createElement('button');
+    shareBtn.id = 'share-view';
+    shareBtn.title = 'Ansicht teilen';
+    shareBtn.textContent = 'Teilen';
+    controls.insertBefore(shareBtn, els.openTodoistLabel || null);
+  }
+  els.shareView = shareBtn;
 })();
 
 let state = {
@@ -114,6 +125,33 @@ function setTitle(label) {
 
 function toast(msg) {
   console.log('[Todoissimus]', msg);
+}
+
+// Build a shareable URL for the current view (mode + selection + local order)
+function buildShareUrl() {
+  const url = new URL(location.href);
+  url.search = '';
+  const params = new URLSearchParams();
+  const mode = state.mode || storage.getMode() || 'label';
+  params.set('mode', mode);
+  if (mode === 'project') {
+    const pid = String(state.projectId || storage.getProjectId() || '');
+    if (pid) params.set('project', pid);
+  } else if (mode === 'filter') {
+    const f = (state.filter || storage.getFilter() || '').trim();
+    if (f) params.set('filter', f);
+  } else {
+    const l = (state.label || storage.getLabel() || '').trim();
+    if (l) params.set('label', l);
+  }
+  // include order for this view, if any
+  const valueKey = mode === 'project' ? String(state.projectId || storage.getProjectId() || '') : (mode === 'filter' ? String(state.filter || storage.getFilter() || '') : String(state.label || storage.getLabel() || ''));
+  const orderKey = `${mode}:${valueKey}`;
+  const order = (storage.getOrder(orderKey) || []).map(String).filter(Boolean);
+  if (order.length) params.set('order', order.join(','));
+  params.set('v', '1');
+  url.search = params.toString();
+  return url.toString();
 }
 
 // Comments API helpers (proxy first, fallback to direct when token present)
@@ -900,13 +938,24 @@ function sortByLocalOrder(tasks, key) {
 }
 
 async function load() {
-  // Allow deep-link via query parameter: ?label=foo
+  // Import view from URL parameters (manual share)
   try {
     const params = new URLSearchParams(location.search);
+    const qpMode = (params.get('mode') || params.get('m') || '').trim();
     const qpLabel = (params.get('label') || params.get('l') || '').trim();
-    if (qpLabel) {
-      storage.setLabel(qpLabel);
-      try { history.replaceState(null, '', location.pathname); } catch (_) {}
+    const qpProject = (params.get('project') || params.get('p') || '').trim();
+    const qpFilter = (params.get('filter') || params.get('f') || '').trim();
+    const qpOrder = (params.get('order') || '').trim();
+    if (qpMode) storage.setMode(qpMode);
+    if (qpLabel) storage.setLabel(qpLabel);
+    if (qpProject) storage.setProjectId(qpProject);
+    if (qpFilter) storage.setFilter(qpFilter);
+    // Persist order under the derived key if present
+    if (qpMode && (qpLabel || qpProject || qpFilter) && qpOrder) {
+      const valueKey = qpMode === 'project' ? qpProject : (qpMode === 'filter' ? qpFilter : qpLabel);
+      const orderKey = `${qpMode}:${String(valueKey || '')}`;
+      const ids = qpOrder.split(',').map(s => s.trim()).filter(Boolean);
+      try { storage.setOrder(orderKey, ids); } catch (_) {}
     }
   } catch (_) {}
 
@@ -1098,6 +1147,28 @@ if (els.filter) {
 
 if (els.updateApp) {
   els.updateApp.addEventListener('click', () => updateAppNow());
+}
+
+// Share current view via URL
+if (els.shareView) {
+  els.shareView.addEventListener('click', async () => {
+    try {
+      const url = buildShareUrl();
+      let copied = false;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(url);
+          copied = true;
+        }
+      } catch (_) {}
+      if (!copied) {
+        try { window.prompt('Link kopieren:', url); copied = true; } catch (_) {}
+      }
+      toast(copied ? 'Teilen-Link kopiert.' : 'Teilen-Link erstellt.');
+    } catch (e) {
+      toast('Teilen fehlgeschlagen');
+    }
+  });
 }
 
 // Open current selection directly in Todoist (web)
