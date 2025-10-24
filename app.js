@@ -739,7 +739,7 @@ function renderTasks(tasks) {
         state.tasks = state.tasks.filter(x => x.id !== t.id);
         const order = storage.getOrder(state.orderKey).filter(id => String(id) !== String(t.id));
         storage.setOrder(state.orderKey, order);
-        renderTasks(state.tasks);
+        softRefresh();
       } catch (err) {
         toast(err.message);
         checkbox.checked = false;
@@ -1076,6 +1076,21 @@ function renderTasks(tasks) {
   els.list.appendChild(frag);
 }
 
+// Soft refresh: re-render current state while preserving scroll position
+function softRefresh() {
+  let winY = 0;
+  let listY = 0;
+  try { winY = window.scrollY || window.pageYOffset || 0; } catch (_) {}
+  try { if (els.list) listY = els.list.scrollTop || 0; } catch (_) {}
+  renderTasks(state.tasks);
+  try {
+    requestAnimationFrame(() => {
+      try { window.scrollTo(0, winY); } catch (_) {}
+      try { if (els.list) els.list.scrollTop = listY; } catch (_) {}
+    });
+  } catch (_) {}
+}
+
 function sortByLocalOrder(tasks, key) {
   const order = storage.getOrder(key).map(String);
   if (!order.length) return tasks.slice();
@@ -1390,7 +1405,7 @@ els.addTaskBtn.addEventListener('click', async () => {
     const ids = Array.from(els.list.querySelectorAll('.task-item')).map(x => x.dataset.id);
     ids.push(String(created.id));
     storage.setOrder(state.orderKey, ids);
-    renderTasks(state.tasks);
+    softRefresh();
     els.newTaskContent.value = '';
     try { els.newTaskContent.focus(); } catch (_) {}
   } catch (err) {
