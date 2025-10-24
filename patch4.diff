@@ -1,0 +1,8 @@
+﻿*** Begin Patch
+*** Update File: app.js
+@@
+-    renderTasks(state.tasks);
++    softRefresh();
+     els.newTaskContent.value = '';
+     try { els.newTaskContent.focus(); } catch (_) {}
+*** End Patch

@@ -1,0 +1,11 @@
+﻿*** Begin Patch
+*** Update File: app.js
+@@
+-        renderTasks(state.tasks);
++        softRefresh();
+       } catch (err) {
+         toast(err.message);
+         checkbox.checked = false;
+       } finally {
+         checkbox.disabled = false;
+*** End Patch

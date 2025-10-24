@@ -1,0 +1,23 @@
+﻿*** Begin Patch
+*** Update File: app.js
+@@
+ function renderTasks(tasks) {
+@@
+ }
+ 
++// Soft refresh: re-render current state while preserving scroll position
++function softRefresh() {
++  let winY = 0;
++  let listY = 0;
++  try { winY = window.scrollY || window.pageYOffset || 0; } catch (_) {}
++  try { if (els.list) listY = els.list.scrollTop || 0; } catch (_) {}
++  renderTasks(state.tasks);
++  try {
++    requestAnimationFrame(() => {
++      try { window.scrollTo(0, winY); } catch (_) {}
++      try { if (els.list) els.list.scrollTop = listY; } catch (_) {}
++    });
++  } catch (_) {}
++}
++
+*** End Patch

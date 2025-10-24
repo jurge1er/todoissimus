@@ -1209,6 +1209,9 @@ async function load() {
     const valueKey = state.mode === 'project' ? String(state.projectId) : (state.mode === 'filter' ? String(state.filter || '') : String(state.label || ''));
     state.orderKey = `${state.mode}:${valueKey}`;
     state.tasks = sortByLocalOrder(tasks, state.orderKey);
+    // Persist the merged order after sync: keep existing order,
+    // drop tasks that disappeared, and append new ones at the end.
+    try { storage.setOrder(state.orderKey, state.tasks.map(t => String(t.id))); } catch (_) {}
     setTitleByState();
     renderTasks(state.tasks);
   } catch (err) {
