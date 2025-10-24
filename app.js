@@ -157,9 +157,9 @@ function toast(msg) {
 // View sync via Todoist: store JSON in the description of a dedicated sync task
 const SYNC_TASK_CONTENT = '[Todoissimus] Sync';
 
-// Preferences for placement
-const SYNC_PROJECT_NAMES = ['#Todoissimus', 'Todoissimus'];
-const SYNC_LABEL_NAMES = ['Ignore', '@Ignore'];
+// Preferences for placement (use plain names without UI prefixes)
+const SYNC_PROJECT_NAMES = ['Todoissimus'];
+const SYNC_LABEL_NAMES = ['Ignore'];
 
 function buildViewState() {
   const mode = state.mode || storage.getMode() || 'label';
@@ -196,7 +196,11 @@ function applyViewState(v) {
 
 async function findSyncTask(token) {
   try {
-    const list = await getTasksByFilter(`search:"${SYNC_TASK_CONTENT}" & !completed`, token);
+    let list = await getTasksByFilter(`search:"${SYNC_TASK_CONTENT}" & !completed`, token);
+    if (!Array.isArray(list) || !list.length) {
+      // Fallback without !completed (REST /tasks already returns only active tasks)
+      list = await getTasksByFilter(`search:"${SYNC_TASK_CONTENT}"`, token);
+    }
     if (Array.isArray(list) && list.length) {
       // Prefer exact content match
       const exact = list.find(t => (t && t.content) === SYNC_TASK_CONTENT);
@@ -219,21 +223,21 @@ async function ensureSyncTaskId(token, initialState) {
       getLabels(token).catch(() => []),
     ]);
     // Find project by preferred names (case-insensitive; treat leading '#' as optional)
-    const wantProj = SYNC_PROJECT_NAMES.map(s => String(s).trim().toLowerCase().replace(/^#+/, ''));
+    const wantProj = SYNC_PROJECT_NAMES.map(s => String(s).trim().toLowerCase());
     for (const p of (projects || [])) {
-      const pname = String(p.name || '').trim().toLowerCase().replace(/^#+/, '');
+      const pname = String(p.name || '').trim().toLowerCase();
       if (wantProj.includes(pname)) { projectId = String(p.id); break; }
     }
-    // Find label by preferred names (case-insensitive; accept with/without '@')
-    const wantLbl = SYNC_LABEL_NAMES.map(s => String(s).trim().toLowerCase().replace(/^@+/, ''));
+    // Find label by preferred names (case-insensitive)
+    const wantLbl = SYNC_LABEL_NAMES.map(s => String(s).trim().toLowerCase());
     for (const l of (labels || [])) {
-      const lname = String(l.name || '').trim().toLowerCase().replace(/^@+/, '');
+      const lname = String(l.name || '').trim().toLowerCase();
       if (wantLbl.includes(lname)) { labelName = l.name; break; }
     }
-    if (!labelName) labelName = SYNC_LABEL_NAMES[1]; // fallback '@Ignore'
+    if (!labelName) labelName = SYNC_LABEL_NAMES[0]; // fallback 'Ignore'
   } catch (_) {
     // fallbacks already set
-    if (!labelName) labelName = SYNC_LABEL_NAMES[1];
+    if (!labelName) labelName = SYNC_LABEL_NAMES[0];
   }
   const payload = { content: SYNC_TASK_CONTENT, description: desc };
   if (projectId) payload.project_id = projectId;
@@ -256,22 +260,23 @@ async function saveSyncedState() {
         getProjects(token).catch(() => []),
         getLabels(token).catch(() => []),
       ]);
-      const wantProj = SYNC_PROJECT_NAMES.map(s => String(s).trim().toLowerCase().replace(/^#+/, ''));
+      const wantProj = SYNC_PROJECT_NAMES.map(s => String(s).trim().toLowerCase());
       for (const p of (projects || [])) {
-        const pname = String(p.name || '').trim().toLowerCase().replace(/^#+/, '');
+        const pname = String(p.name || '').trim().toLowerCase();
         if (wantProj.includes(pname)) { projectId = String(p.id); break; }
       }
-      const wantLbl = SYNC_LABEL_NAMES.map(s => String(s).trim().toLowerCase().replace(/^@+/, ''));
+      const wantLbl = SYNC_LABEL_NAMES.map(s => String(s).trim().toLowerCase());
       for (const l of (labels || [])) {
-        const lname = String(l.name || '').trim().toLowerCase().replace(/^@+/, '');
+        const lname = String(l.name || '').trim().toLowerCase();
         if (wantLbl.includes(lname)) { labelName = l.name; break; }
       }
-      if (!labelName) labelName = SYNC_LABEL_NAMES[1];
-    } catch(_) { if (!labelName) labelName = SYNC_LABEL_NAMES[1]; }
+      if (!labelName) labelName = SYNC_LABEL_NAMES[0];
+    } catch(_) { if (!labelName) labelName = SYNC_LABEL_NAMES[0]; }
+    // First update description and labels (project move via REST may be unsupported)
     const patch = { description: JSON.stringify(view) };
-    if (projectId) patch.project_id = projectId;
     if (labelName) patch.labels = [labelName];
     await updateTask(taskId, patch, token);
+    // If we know the desired project and the task isn't there, we could consider recreate/move via Sync API.
     toast('Ansicht in Todoist gespeichert.');
   } catch (e) {
     toast('Sync speichern fehlgeschlagen.');
@@ -1454,3 +1459,49 @@ try {
     }
   }, { capture: true });
 } catch {}
+
+// Override sync functions to allow proxy token fallback
+// Rationale: If no client token is stored, the server proxy may provide TODOIST_TOKEN.
+// These overrides remove the early bail-out on missing client token.
+async function saveSyncedState() {
+  const token = storage.getToken();
+  const view = buildViewState();
+  try {
+    const taskId = await ensureSyncTaskId(token || undefined, view);
+    // Ensure label placement (project move via REST may be unsupported)
+    let labelName = '';
+    try {
+      const labels = await getLabels(token || undefined).catch(() => []);
+      const wantLbl = SYNC_LABEL_NAMES.map(s => String(s).trim().toLowerCase());
+      for (const l of (labels || [])) {
+        const lname = String(l.name || '').trim().toLowerCase();
+        if (wantLbl.includes(lname)) { labelName = l.name; break; }
+      }
+      if (!labelName) labelName = SYNC_LABEL_NAMES[0];
+    } catch(_) { if (!labelName) labelName = SYNC_LABEL_NAMES[0]; }
+    const patch = { description: JSON.stringify(view) };
+    if (labelName) patch.labels = [labelName];
+    await updateTask(taskId, patch, token || undefined);
+    toast('Ansicht in Todoist gespeichert.');
+  } catch (_) {
+    toast('Sync speichern fehlgeschlagen.');
+  }
+}
+
+async function loadSyncedState() {
+  const token = storage.getToken();
+  try {
+    const task = await findSyncTask(token || undefined);
+    if (!task) { toast('Kein Sync-Datensatz gefunden.'); return false; }
+    const desc = (task && typeof task.description === 'string') ? task.description : '';
+    let data = null;
+    try { data = JSON.parse(desc || 'null'); } catch (_) { data = null; }
+    if (!data) { toast('Sync-Daten leer oder ungültig.'); return false; }
+    const ok = applyViewState(data);
+    if (ok) toast('Ansicht aus Todoist geladen.');
+    return ok;
+  } catch (_) {
+    toast('Sync laden fehlgeschlagen.');
+    return false;
+  }
+}
