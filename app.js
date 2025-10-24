@@ -148,6 +148,12 @@ function toast(msg) {
 
 // View sync via Todoist: store JSON in the description of a dedicated sync task
 const SYNC_TASK_CONTENT = '[Todoissimus] Sync';
+// Build canonical non-checkable title (Todoist treats leading "* " as non-checkable)
+function getSyncContent() { return `* ${SYNC_TASK_CONTENT}`; }
+function isSyncContent(txt) {
+  const s = String(txt || '').trim();
+  return s === SYNC_TASK_CONTENT || s === `* ${SYNC_TASK_CONTENT}`;
+}
 
 // Preferences for placement (use plain names without UI prefixes)
 const SYNC_PROJECT_NAMES = ['Todoissimus'];
@@ -194,8 +200,8 @@ async function findSyncTask(token) {
       list = await getTasksByFilter(`search:"${SYNC_TASK_CONTENT}"`, token);
     }
     if (Array.isArray(list) && list.length) {
-      // Prefer exact content match
-      const exact = list.find(t => (t && t.content) === SYNC_TASK_CONTENT);
+      // Prefer exact content match (with or without leading "* ")
+      const exact = list.find(t => t && isSyncContent(t.content));
       return exact || list[0];
     }
   } catch (_) {}
@@ -231,7 +237,7 @@ async function ensureSyncTaskId(token, initialState) {
     // fallbacks already set
     if (!labelName) labelName = SYNC_LABEL_NAMES[0];
   }
-  const payload = { content: SYNC_TASK_CONTENT, description: desc };
+  const payload = { content: getSyncContent(), description: desc };
   if (projectId) payload.project_id = projectId;
   if (labelName) payload.labels = [labelName];
   const created = await createTask(payload, token);
@@ -265,7 +271,7 @@ async function saveSyncedState() {
       if (!labelName) labelName = SYNC_LABEL_NAMES[0];
     } catch(_) { if (!labelName) labelName = SYNC_LABEL_NAMES[0]; }
     // First update description and labels (project move via REST may be unsupported)
-    const patch = { description: JSON.stringify(view) };
+    const patch = { description: JSON.stringify(view), content: getSyncContent() };
     if (labelName) patch.labels = [labelName];
     await updateTask(taskId, patch, token);
     // If we know the desired project and the task isn't there, we could consider recreate/move via Sync API.
@@ -1429,7 +1435,7 @@ async function findSyncTask(token) {
   try {
     const byLabel = await getTasksByFilter('label:Ignore', token);
     if (Array.isArray(byLabel) && byLabel.length) {
-      const exact = byLabel.find(t => (t && t.content) === SYNC_TASK_CONTENT);
+      const exact = byLabel.find(t => t && isSyncContent(t.content));
       if (exact) return exact;
     }
   } catch (_) {}
@@ -1440,7 +1446,7 @@ async function findSyncTask(token) {
     if (target && target.id) {
       const byProject = await getTasksByProject(String(target.id), token);
       if (Array.isArray(byProject) && byProject.length) {
-        const exact = byProject.find(t => (t && t.content) === SYNC_TASK_CONTENT);
+        const exact = byProject.find(t => t && isSyncContent(t.content));
         if (exact) return exact;
       }
     }
@@ -1450,7 +1456,7 @@ async function findSyncTask(token) {
     let list = await getTasksByFilter(`search:${SYNC_TASK_CONTENT}`, token);
     if (!Array.isArray(list) || !list.length) list = await getTasksByFilter(`search:"${SYNC_TASK_CONTENT}"`, token);
     if (Array.isArray(list) && list.length) {
-      const exact = list.find(t => (t && t.content) === SYNC_TASK_CONTENT);
+      const exact = list.find(t => t && isSyncContent(t.content));
       if (exact) return exact;
       return list[0];
     }
@@ -1476,7 +1482,7 @@ async function ensureSyncTaskId(token, initialState) {
     const lbl = (labels || []).find(l => String(l.name||'').trim().toLowerCase() === 'ignore');
     if (lbl && lbl.name) labelName = lbl.name; else labelName = 'Ignore';
   } catch (_) { labelName = labelName || 'Ignore'; }
-  const payload = { content: SYNC_TASK_CONTENT, description: desc, is_checkable: false };
+  const payload = { content: getSyncContent(), description: desc, is_checkable: false };
   if (projectId) payload.project_id = projectId;
   if (labelName) payload.labels = [labelName];
   const created = await createTask(payload, token);
@@ -1503,7 +1509,7 @@ async function saveSyncedState() {
       }
       if (!labelName) labelName = SYNC_LABEL_NAMES[0];
     } catch(_) { if (!labelName) labelName = SYNC_LABEL_NAMES[0]; }
-    const patch = { description: JSON.stringify(view), is_checkable: false };
+    const patch = { description: JSON.stringify(view), content: getSyncContent(), is_checkable: false };
     if (labelName) patch.labels = [labelName];
     await updateTask(taskId, patch, token || undefined);
     toast('Ansicht in Todoist gespeichert.');
