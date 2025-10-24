@@ -30,6 +30,9 @@ const els = {
   label: document.getElementById('label'),
   refresh: document.getElementById('refresh'),
   shareView: document.getElementById('share-view'),
+  settingsActions: document.querySelector('.settings-actions'),
+  syncSave: null,
+  syncLoad: null,
   listTitle: document.getElementById('list-title'),
   list: document.getElementById('task-list'),
   empty: document.getElementById('empty'),
@@ -73,6 +76,30 @@ const els = {
     controls.insertBefore(shareBtn, els.openTodoistLabel || null);
   }
   els.shareView = shareBtn;
+  // Inject Sync buttons into settings actions if possible
+  try {
+    const actions = document.querySelector('.settings-actions');
+    if (actions) {
+      let btnSave = document.getElementById('sync-save');
+      if (!btnSave) {
+        btnSave = document.createElement('button');
+        btnSave.id = 'sync-save';
+        btnSave.textContent = 'Sync speichern';
+        btnSave.title = 'Aktuelle Ansicht in Todoist speichern';
+        actions.appendChild(btnSave);
+      }
+      let btnLoad = document.getElementById('sync-load');
+      if (!btnLoad) {
+        btnLoad = document.createElement('button');
+        btnLoad.id = 'sync-load';
+        btnLoad.textContent = 'Sync laden';
+        btnLoad.title = 'Ansicht aus Todoist laden';
+        actions.appendChild(btnLoad);
+      }
+      els.syncSave = btnSave;
+      els.syncLoad = btnLoad;
+    }
+  } catch (_) {}
 })();
 
 let state = {
@@ -127,6 +154,148 @@ function toast(msg) {
   console.log('[Todoissimus]', msg);
 }
 
+// View sync via Todoist: store JSON in the description of a dedicated sync task
+const SYNC_TASK_CONTENT = '[Todoissimus] Sync';
+
+// Preferences for placement
+const SYNC_PROJECT_NAMES = ['#Todoissimus', 'Todoissimus'];
+const SYNC_LABEL_NAMES = ['Ignore', '@Ignore'];
+
+function buildViewState() {
+  const mode = state.mode || storage.getMode() || 'label';
+  const v = {
+    v: 1,
+    mode,
+    label: state.label || storage.getLabel() || '',
+    projectId: state.projectId || storage.getProjectId() || '',
+    filter: state.filter || storage.getFilter() || '',
+    ts: Date.now(),
+  };
+  const valueKey = mode === 'project' ? String(v.projectId || '') : (mode === 'filter' ? String(v.filter || '') : String(v.label || ''));
+  v.orderKey = `${mode}:${valueKey}`;
+  v.order = (storage.getOrder(v.orderKey) || []).map(String);
+  return v;
+}
+
+function applyViewState(v) {
+  if (!v || typeof v !== 'object') return false;
+  try {
+    if (v.mode) storage.setMode(v.mode);
+    if ('label' in v) storage.setLabel(v.label || '');
+    if ('projectId' in v) storage.setProjectId(String(v.projectId || ''));
+    if ('filter' in v) storage.setFilter(v.filter || '');
+    if (v.orderKey && Array.isArray(v.order)) storage.setOrder(String(v.orderKey), v.order.map(String));
+    // also reflect into current state snapshot used by this session
+    state.mode = storage.getMode();
+    state.label = storage.getLabel();
+    state.projectId = storage.getProjectId();
+    state.filter = storage.getFilter();
+    return true;
+  } catch (_) { return false; }
+}
+
+async function findSyncTask(token) {
+  try {
+    const list = await getTasksByFilter(`search:"${SYNC_TASK_CONTENT}" & !completed`, token);
+    if (Array.isArray(list) && list.length) {
+      // Prefer exact content match
+      const exact = list.find(t => (t && t.content) === SYNC_TASK_CONTENT);
+      return exact || list[0];
+    }
+  } catch (_) {}
+  return null;
+}
+
+async function ensureSyncTaskId(token, initialState) {
+  const existing = await findSyncTask(token);
+  if (existing && existing.id) return existing.id;
+  const desc = initialState ? JSON.stringify(initialState) : '';
+  // Resolve desired placement (project + label)
+  let projectId = '';
+  let labelName = '';
+  try {
+    const [projects, labels] = await Promise.all([
+      getProjects(token).catch(() => []),
+      getLabels(token).catch(() => []),
+    ]);
+    // Find project by preferred names (case-insensitive; treat leading '#' as optional)
+    const wantProj = SYNC_PROJECT_NAMES.map(s => String(s).trim().toLowerCase().replace(/^#+/, ''));
+    for (const p of (projects || [])) {
+      const pname = String(p.name || '').trim().toLowerCase().replace(/^#+/, '');
+      if (wantProj.includes(pname)) { projectId = String(p.id); break; }
+    }
+    // Find label by preferred names (case-insensitive; accept with/without '@')
+    const wantLbl = SYNC_LABEL_NAMES.map(s => String(s).trim().toLowerCase().replace(/^@+/, ''));
+    for (const l of (labels || [])) {
+      const lname = String(l.name || '').trim().toLowerCase().replace(/^@+/, '');
+      if (wantLbl.includes(lname)) { labelName = l.name; break; }
+    }
+    if (!labelName) labelName = SYNC_LABEL_NAMES[1]; // fallback '@Ignore'
+  } catch (_) {
+    // fallbacks already set
+    if (!labelName) labelName = SYNC_LABEL_NAMES[1];
+  }
+  const payload = { content: SYNC_TASK_CONTENT, description: desc };
+  if (projectId) payload.project_id = projectId;
+  if (labelName) payload.labels = [labelName];
+  const created = await createTask(payload, token);
+  return created.id;
+}
+
+async function saveSyncedState() {
+  const token = storage.getToken();
+  if (!token) { toast('Kein Token für Sync.'); return; }
+  const view = buildViewState();
+  try {
+    const taskId = await ensureSyncTaskId(token, view);
+    // Also ensure project/label placement on existing task
+    let projectId = '';
+    let labelName = '';
+    try {
+      const [projects, labels] = await Promise.all([
+        getProjects(token).catch(() => []),
+        getLabels(token).catch(() => []),
+      ]);
+      const wantProj = SYNC_PROJECT_NAMES.map(s => String(s).trim().toLowerCase().replace(/^#+/, ''));
+      for (const p of (projects || [])) {
+        const pname = String(p.name || '').trim().toLowerCase().replace(/^#+/, '');
+        if (wantProj.includes(pname)) { projectId = String(p.id); break; }
+      }
+      const wantLbl = SYNC_LABEL_NAMES.map(s => String(s).trim().toLowerCase().replace(/^@+/, ''));
+      for (const l of (labels || [])) {
+        const lname = String(l.name || '').trim().toLowerCase().replace(/^@+/, '');
+        if (wantLbl.includes(lname)) { labelName = l.name; break; }
+      }
+      if (!labelName) labelName = SYNC_LABEL_NAMES[1];
+    } catch(_) { if (!labelName) labelName = SYNC_LABEL_NAMES[1]; }
+    const patch = { description: JSON.stringify(view) };
+    if (projectId) patch.project_id = projectId;
+    if (labelName) patch.labels = [labelName];
+    await updateTask(taskId, patch, token);
+    toast('Ansicht in Todoist gespeichert.');
+  } catch (e) {
+    toast('Sync speichern fehlgeschlagen.');
+  }
+}
+
+async function loadSyncedState() {
+  const token = storage.getToken();
+  if (!token) { toast('Kein Token für Sync.'); return false; }
+  try {
+    const task = await findSyncTask(token);
+    if (!task) { toast('Kein Sync-Datensatz gefunden.'); return false; }
+    const desc = (task && typeof task.description === 'string') ? task.description : '';
+    let data = null;
+    try { data = JSON.parse(desc || 'null'); } catch (_) { data = null; }
+    if (!data) { toast('Sync-Daten leer oder ungültig.'); return false; }
+    const ok = applyViewState(data);
+    if (ok) toast('Ansicht aus Todoist geladen.');
+    return ok;
+  } catch (_) {
+    toast('Sync laden fehlgeschlagen.');
+    return false;
+  }
+}
 // Build a shareable URL for the current view (mode + selection + local order)
 function buildShareUrl() {
   const url = new URL(location.href);
@@ -1167,6 +1336,25 @@ if (els.shareView) {
       toast(copied ? 'Teilen-Link kopiert.' : 'Teilen-Link erstellt.');
     } catch (e) {
       toast('Teilen fehlgeschlagen');
+    }
+  });
+}
+
+// Sync buttons handlers
+if (els.syncSave) {
+  els.syncSave.addEventListener('click', () => { saveSyncedState(); });
+}
+if (els.syncLoad) {
+  els.syncLoad.addEventListener('click', async () => {
+    const ok = await loadSyncedState();
+    if (ok) {
+      // refresh UI with the new state
+      try { els.mode.value = storage.getMode(); } catch(_) {}
+      try { els.label.value = storage.getLabel(); } catch(_) {}
+      try { if (els.project) els.project.value = storage.getProjectId(); } catch(_) {}
+      try { if (els.filter) els.filter.value = storage.getFilter(); } catch(_) {}
+      setTitleByState();
+      load();
     }
   });
 }
