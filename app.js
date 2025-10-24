@@ -1389,10 +1389,22 @@ els.addTaskBtn.addEventListener('click', async () => {
     storage.setOrder(state.orderKey, ids);
     renderTasks(state.tasks);
     els.newTaskContent.value = '';
+    try { els.newTaskContent.focus(); } catch (_) {}
   } catch (err) {
     toast(err.message);
   }
 });
+
+// Enter key in the input should trigger add
+if (els.newTaskContent) {
+  els.newTaskContent.addEventListener('keydown', (e) => {
+    if (e && (e.key === 'Enter' || e.keyCode === 13)) {
+      if (e.isComposing) return; // avoid IME interim commits
+      try { e.preventDefault(); } catch (_) {}
+      if (els.addTaskBtn) els.addTaskBtn.click();
+    }
+  });
+}
 
 // Start
 try { (function(){ const input=document.getElementById('filter'); if(!input) return; let dl=document.getElementById('filters-list'); if(!dl){ dl=document.createElement('datalist'); dl.id='filters-list'; input.setAttribute('list','filters-list'); (input.parentElement||document.body).appendChild(dl);} dl.innerHTML=''; let list=[]; try{ list=JSON.parse(localStorage.getItem('todoissimus_filters_list')||'[]'); }catch{} for(const f of list){ const opt=document.createElement('option'); opt.value=f; dl.appendChild(opt);} })(); } catch {}
